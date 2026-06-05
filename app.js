@@ -81,17 +81,19 @@ class FinanceApp {
     // Initialize Auth state listener
     firebase.auth().onAuthStateChanged((user) => {
       const loginOverlay = document.getElementById("login-overlay");
-      const btnLogout = document.getElementById("btn-logout");
+      const btnSettingsToggle = document.getElementById("btn-settings-toggle");
+      const appBodyLayout = document.getElementById("app-body-layout");
       
       if (user) {
         if (loginOverlay) loginOverlay.classList.remove("active");
-        if (btnLogout) btnLogout.style.display = "inline-flex";
+        if (btnSettingsToggle) btnSettingsToggle.style.display = "inline-flex";
         
         // Load existing database from Firestore
         this.loadFromStorage();
       } else {
         if (loginOverlay) loginOverlay.classList.add("active");
-        if (btnLogout) btnLogout.style.display = "none";
+        if (btnSettingsToggle) btnSettingsToggle.style.display = "none";
+        if (appBodyLayout) appBodyLayout.classList.remove("settings-open");
         
         // Clear state to prevent screen leak
         this.state.groups = [];
@@ -296,7 +298,7 @@ class FinanceApp {
     if (this.dom.storageStatus) {
       this.dom.storageStatus.innerHTML = `
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-        Storage Used: ${mb.toFixed(3)} / 5.00 MB
+        Storage Used: ${mb.toFixed(3)} MB
       `;
     }
   }
@@ -426,6 +428,24 @@ class FinanceApp {
 
   // Attaches event handlers to UI inputs, form submissions, and buttons
   initEventListeners() {
+    // Settings sidebar toggle
+    const btnSettings = document.getElementById("btn-settings-toggle");
+    const btnCloseSettings = document.getElementById("btn-close-settings");
+    const appBodyLayout = document.getElementById("app-body-layout");
+    
+    if (btnSettings && appBodyLayout) {
+      btnSettings.addEventListener("click", (e) => {
+        e.stopPropagation();
+        appBodyLayout.classList.toggle("settings-open");
+      });
+    }
+    if (btnCloseSettings && appBodyLayout) {
+      btnCloseSettings.addEventListener("click", (e) => {
+        e.stopPropagation();
+        appBodyLayout.classList.remove("settings-open");
+      });
+    }
+
     // Login form submission handler
     const loginForm = document.getElementById("login-form");
     if (loginForm) {
