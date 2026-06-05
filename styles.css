@@ -2137,20 +2137,20 @@ body.light-theme .auth-loading-overlay {
 }
 
 .logo-img-large {
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
+  width: 180px;
+  height: 180px;
+  border-radius: 12px;
   object-fit: contain;
   background: #000000;
-  padding: 4px;
-  border: 2px solid var(--accent-gold);
+  padding: 8px;
+  border: 1px solid var(--border-color);
   box-shadow: var(--shadow-glow);
 }
 
 .login-logo-container {
   display: flex;
   justify-content: center;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
 }
 
 
