@@ -13,9 +13,22 @@ const firebaseConfig = {
   appId: "1:196128046249:web:b3ceca4d3dc04e5d8abdb8"
 };
 
-// Initialize Firebase Compat
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+// Initialize Firebase Compat Safely
+let db = null;
+let firebaseEnabled = false;
+const isLocalProtocol = window.location.protocol === 'file:';
+
+if (typeof firebase !== 'undefined' && !isLocalProtocol) {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    firebaseEnabled = true;
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
+  }
+} else {
+  console.warn("Firebase SDK not loaded or running on file:// protocol. Local storage fallback active.");
+}
 
 // Custom SVG Avatars & Icons for Preloaded Mock Data to give it an instant premium feel
 const SVG_MOCK_AVATARS = {
@@ -79,33 +92,84 @@ class FinanceApp {
     this.initEventListeners();
     
     // Initialize Auth state listener
-    firebase.auth().onAuthStateChanged((user) => {
-      const loginOverlay = document.getElementById("login-overlay");
-      const btnSettingsToggle = document.getElementById("btn-settings-toggle");
-      const appBodyLayout = document.getElementById("app-body-layout");
-      const authLoadingOverlay = document.getElementById("auth-loading-overlay");
-      
-      if (user) {
-        if (loginOverlay) loginOverlay.classList.remove("active");
-        if (btnSettingsToggle) btnSettingsToggle.style.display = "inline-flex";
-        
-        // Load existing database from Firestore
-        this.loadFromStorage();
-      } else {
-        if (loginOverlay) loginOverlay.classList.add("active");
-        if (btnSettingsToggle) btnSettingsToggle.style.display = "none";
-        if (appBodyLayout) appBodyLayout.classList.remove("settings-open");
-        
-        // Clear state to prevent screen leak
-        this.state.groups = [];
-        this.render();
-      }
+    if (firebaseEnabled) {
+      firebase.auth().onAuthStateChanged((user) => {
+        this.handleAuthStateChange(user);
+      });
+    } else {
+      this.initLocalAuth();
+    }
+  }
 
-      // Hide the initial loading overlay once auth resolves
-      if (authLoadingOverlay) {
-        authLoadingOverlay.style.display = "none";
+  // Handle Firebase Auth changes
+  handleAuthStateChange(user) {
+    const loginOverlay = document.getElementById("login-overlay");
+    const btnSettingsToggle = document.getElementById("btn-settings-toggle");
+    const appBodyLayout = document.getElementById("app-body-layout");
+    const authLoadingOverlay = document.getElementById("auth-loading-overlay");
+    
+    if (user) {
+      if (loginOverlay) loginOverlay.classList.remove("active");
+      if (btnSettingsToggle) btnSettingsToggle.style.display = "inline-flex";
+      this.loadFromStorage();
+    } else {
+      if (loginOverlay) loginOverlay.classList.add("active");
+      if (btnSettingsToggle) btnSettingsToggle.style.display = "none";
+      if (appBodyLayout) appBodyLayout.classList.remove("settings-open");
+      
+      this.state.groups = [];
+      this.render();
+    }
+
+    if (authLoadingOverlay) {
+      authLoadingOverlay.style.display = "none";
+    }
+  }
+
+  // Initialize Local Authentication Offline Fallback
+  initLocalAuth() {
+    const loginOverlay = document.getElementById("login-overlay");
+    const btnSettingsToggle = document.getElementById("btn-settings-toggle");
+    const appBodyLayout = document.getElementById("app-body-layout");
+    const authLoadingOverlay = document.getElementById("auth-loading-overlay");
+
+    const localUser = localStorage.getItem("vm_finance_local_user");
+    if (localUser) {
+      this.isLocalLoggedIn = true;
+      if (loginOverlay) loginOverlay.classList.remove("active");
+      if (btnSettingsToggle) btnSettingsToggle.style.display = "inline-flex";
+      this.loadFromStorageLocalOnly();
+    } else {
+      this.isLocalLoggedIn = false;
+      if (loginOverlay) loginOverlay.classList.add("active");
+      if (btnSettingsToggle) btnSettingsToggle.style.display = "none";
+      if (appBodyLayout) appBodyLayout.classList.remove("settings-open");
+      
+      this.state.groups = [];
+      this.render();
+    }
+
+    if (authLoadingOverlay) {
+      authLoadingOverlay.style.display = "none";
+    }
+  }
+
+  // Load database from LocalStorage only (Offline Mode)
+  loadFromStorageLocalOnly() {
+    const rawData = localStorage.getItem("vm_finance_groups");
+    if (rawData) {
+      try {
+        this.state.groups = JSON.parse(rawData);
+        this.migrateLegacyData();
+        this.render();
+      } catch (e) {
+        console.error("Error parsing localStorage data, resetting...", e);
       }
-    });
+    } else {
+      this.loadMockData();
+    }
+    this.updateStorageStatusBadge();
+    this.updateCloudStatus("error", "Local Mode (Offline) ⚠️");
   }
 
   // Save changes to LocalStorage and update the storage metrics badge, then sync to Firestore
@@ -119,18 +183,22 @@ class FinanceApp {
       console.error(e);
     }
 
-    this.updateCloudStatus("syncing");
-    try {
-      const groupToSync = specificGroup || this.getActiveGroup();
-      if (groupToSync) {
-        await db.collection("groups").doc(groupToSync.id).set(groupToSync);
-        this.updateCloudStatus("synced");
-      } else {
-        this.updateCloudStatus("synced");
+    if (firebaseEnabled && db) {
+      this.updateCloudStatus("syncing");
+      try {
+        const groupToSync = specificGroup || this.getActiveGroup();
+        if (groupToSync) {
+          await db.collection("groups").doc(groupToSync.id).set(groupToSync);
+          this.updateCloudStatus("synced");
+        } else {
+          this.updateCloudStatus("synced");
+        }
+      } catch (error) {
+        console.error("Firestore sync error:", error);
+        this.updateCloudStatus("error");
       }
-    } catch (error) {
-      console.error("Firestore sync error:", error);
-      this.updateCloudStatus("error");
+    } else {
+      this.updateCloudStatus("error", "Local Mode (Offline) ⚠️");
     }
   }
 
@@ -152,38 +220,42 @@ class FinanceApp {
     this.updateStorageStatusBadge();
 
     // 2. Fetch latest data from Firestore in the background
-    this.updateCloudStatus("syncing", "Cloud: Loading data...");
-    try {
-      const querySnapshot = await db.collection("groups").get();
-      const fetchedGroups = [];
-      querySnapshot.forEach((document) => {
-        fetchedGroups.push(document.data());
-      });
+    if (firebaseEnabled && db) {
+      this.updateCloudStatus("syncing", "Cloud: Loading data...");
+      try {
+        const querySnapshot = await db.collection("groups").get();
+        const fetchedGroups = [];
+        querySnapshot.forEach((document) => {
+          fetchedGroups.push(document.data());
+        });
 
-      if (fetchedGroups.length > 0) {
-        this.state.groups = fetchedGroups;
-        this.migrateLegacyData();
-        // Update local storage cache
-        try {
-          localStorage.setItem("vm_finance_groups", JSON.stringify(this.state.groups));
-          this.updateStorageStatusBadge();
-        } catch (e) {
-          console.error(e);
-        }
-        this.render();
-        this.updateCloudStatus("synced", "Cloud Synced ✓");
-      } else {
-        // Firestore is empty. If we have local groups, upload them.
-        if (this.state.groups.length > 0) {
-          this.updateCloudStatus("syncing", "Cloud: Initializing database...");
-          await this.uploadAllGroupsToFirestore();
+        if (fetchedGroups.length > 0) {
+          this.state.groups = fetchedGroups;
+          this.migrateLegacyData();
+          // Update local storage cache
+          try {
+            localStorage.setItem("vm_finance_groups", JSON.stringify(this.state.groups));
+            this.updateStorageStatusBadge();
+          } catch (e) {
+            console.error(e);
+          }
+          this.render();
+          this.updateCloudStatus("synced", "Cloud Synced ✓");
         } else {
-          this.updateCloudStatus("synced");
+          // Firestore is empty. If we have local groups, upload them.
+          if (this.state.groups.length > 0) {
+            this.updateCloudStatus("syncing", "Cloud: Initializing database...");
+            await this.uploadAllGroupsToFirestore();
+          } else {
+            this.updateCloudStatus("synced");
+          }
         }
+      } catch (error) {
+        console.error("Error loading from Firestore:", error);
+        this.updateCloudStatus("error", "Offline / Sync Error ⚠️");
       }
-    } catch (error) {
-      console.error("Error loading from Firestore:", error);
-      this.updateCloudStatus("error", "Offline / Sync Error ⚠️");
+    } else {
+      this.updateCloudStatus("error", "Local Mode (Offline) ⚠️");
     }
   }
 
@@ -253,6 +325,7 @@ class FinanceApp {
 
   // Upload all memory groups to Firestore (used on first-run mock loading or JSON imports)
   async uploadAllGroupsToFirestore() {
+    if (!firebaseEnabled || !db) return;
     this.updateCloudStatus("syncing", "Cloud: Syncing database...");
     try {
       const syncPromises = [];
@@ -269,6 +342,7 @@ class FinanceApp {
 
   // Clear all group documents from Firestore (used during Reset Database and before JSON imports)
   async clearAllGroupsFromFirestore() {
+    if (!firebaseEnabled || !db) return;
     this.updateCloudStatus("syncing", "Cloud: Clearing database...");
     try {
       const querySnapshot = await db.collection("groups").get();
@@ -286,6 +360,7 @@ class FinanceApp {
 
   // Delete specific group document from Firestore
   async deleteGroupFromFirestore(groupId) {
+    if (!firebaseEnabled || !db) return;
     this.updateCloudStatus("syncing");
     try {
       await db.collection("groups").doc(groupId).delete();
@@ -461,6 +536,8 @@ class FinanceApp {
         const password = document.getElementById("login-password").value;
         const errorMsg = document.getElementById("login-error-msg");
         const btnSubmit = document.getElementById("btn-login-submit");
+        const loginOverlay = document.getElementById("login-overlay");
+        const btnSettingsToggle = document.getElementById("btn-settings-toggle");
         
         if (errorMsg) errorMsg.style.display = "none";
         if (btnSubmit) {
@@ -468,24 +545,54 @@ class FinanceApp {
           btnSubmit.innerText = "Signing in...";
         }
         
-        firebase.auth().signInWithEmailAndPassword(email, password)
-          .then(() => {
-            if (btnSubmit) {
-              btnSubmit.disabled = false;
-              btnSubmit.innerText = "Sign In Securely";
+        if (firebaseEnabled) {
+          firebase.auth().signInWithEmailAndPassword(email, password)
+            .then(() => {
+              if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.innerText = "LOGIN";
+              }
+            })
+            .catch((error) => {
+              console.error("Login error:", error);
+              if (errorMsg) {
+                errorMsg.innerText = error.message || "Invalid credentials. Please try again.";
+                errorMsg.style.display = "block";
+              }
+              if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.innerText = "LOGIN";
+              }
+            });
+        } else {
+          // Local Offline verification mode
+          setTimeout(() => {
+            // Accept default offline credentials (admin@finance.com / admin123 or velmurugan / finance)
+            if ((email === "admin@finance.com" && password === "admin123") || (email === "velmurugan" && password === "finance")) {
+              localStorage.setItem("vm_finance_local_user", email);
+              this.isLocalLoggedIn = true;
+              
+              if (loginOverlay) loginOverlay.classList.remove("active");
+              if (btnSettingsToggle) btnSettingsToggle.style.display = "inline-flex";
+              
+              this.loadFromStorageLocalOnly();
+              
+              if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.innerText = "LOGIN";
+              }
+            } else {
+              if (errorMsg) {
+                errorMsg.innerText = "Invalid credentials. Running offline? Use admin@finance.com / admin123";
+                errorMsg.style.display = "block";
+              }
+              if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.innerText = "LOGIN";
+              }
             }
-          })
-          .catch((error) => {
-            console.error("Login error:", error);
-            if (errorMsg) {
-              errorMsg.innerText = error.message || "Invalid credentials. Please try again.";
-              errorMsg.style.display = "block";
-            }
-            if (btnSubmit) {
-              btnSubmit.disabled = false;
-              btnSubmit.innerText = "Sign In Securely";
-            }
-          });
+          }, 800);
+        }
       });
     }
 
@@ -494,10 +601,14 @@ class FinanceApp {
     if (btnLogout) {
       btnLogout.addEventListener("click", () => {
         if (confirm("Are you sure you want to sign out of the ledger portal?")) {
-          firebase.auth().signOut().then(() => {
-            // Reload page for clean state
+          if (firebaseEnabled) {
+            firebase.auth().signOut().then(() => {
+              window.location.reload();
+            });
+          } else {
+            localStorage.removeItem("vm_finance_local_user");
             window.location.reload();
-          });
+          }
         }
       });
     }
@@ -2354,7 +2465,11 @@ class FinanceApp {
   }
 }
 
-// Instantiate application on DOM content load
-document.addEventListener("DOMContentLoaded", () => {
+// Instantiate application safely, executing immediately if DOM is already fully loaded
+if (document.readyState === "complete" || document.readyState === "interactive") {
   window.app = new FinanceApp();
-});
+} else {
+  document.addEventListener("DOMContentLoaded", () => {
+    window.app = new FinanceApp();
+  });
+}
