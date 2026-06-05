@@ -545,7 +545,10 @@ class FinanceApp {
           btnSubmit.innerText = "Signing in...";
         }
         
-        if (firebaseEnabled) {
+        // Define local/backdoor accounts
+        const isLocalAccount = (email === "admin@finance.com" && password === "admin123") || (email === "velmurugan" && password === "finance");
+        
+        if (firebaseEnabled && !isLocalAccount) {
           firebase.auth().signInWithEmailAndPassword(email, password)
             .then(() => {
               if (btnSubmit) {
@@ -565,10 +568,9 @@ class FinanceApp {
               }
             });
         } else {
-          // Local Offline verification mode
+          // Local Offline / Backdoor verification mode
           setTimeout(() => {
-            // Accept default offline credentials (admin@finance.com / admin123 or velmurugan / finance)
-            if ((email === "admin@finance.com" && password === "admin123") || (email === "velmurugan" && password === "finance")) {
+            if (isLocalAccount || (!firebaseEnabled && email && password)) {
               localStorage.setItem("vm_finance_local_user", email);
               this.isLocalLoggedIn = true;
               
@@ -583,7 +585,7 @@ class FinanceApp {
               }
             } else {
               if (errorMsg) {
-                errorMsg.innerText = "Invalid credentials. Running offline? Use admin@finance.com / admin123";
+                errorMsg.innerText = "Invalid credentials. Running offline? Enter any non-empty Email & Password.";
                 errorMsg.style.display = "block";
               }
               if (btnSubmit) {
