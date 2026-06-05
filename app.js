@@ -83,6 +83,7 @@ class FinanceApp {
       const loginOverlay = document.getElementById("login-overlay");
       const btnSettingsToggle = document.getElementById("btn-settings-toggle");
       const appBodyLayout = document.getElementById("app-body-layout");
+      const authLoadingOverlay = document.getElementById("auth-loading-overlay");
       
       if (user) {
         if (loginOverlay) loginOverlay.classList.remove("active");
@@ -98,6 +99,11 @@ class FinanceApp {
         // Clear state to prevent screen leak
         this.state.groups = [];
         this.render();
+      }
+
+      // Hide the initial loading overlay once auth resolves
+      if (authLoadingOverlay) {
+        authLoadingOverlay.style.display = "none";
       }
     });
   }
