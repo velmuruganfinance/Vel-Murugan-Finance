@@ -5,6 +5,54 @@
  */
 
 // Custom SVG Avatars & Icons for Preloaded Mock Data to give it an instant premium feel
+// 1. Tell your website to download Firebase tools from the internet
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// 2. Paste your secret Firebase config block right here:
+const firebaseConfig = {
+  apiKey: "AIzaSyD063RHy5P6l9VqBCuaL9jY6uW48uxTtBg",
+  authDomain: "vel-murugan-finance123.firebaseapp.com",
+  projectId: "vel-murugan-finance123",
+  storageBucket: "vel-murugan-finance123.firebasestorage.app",
+  messagingSenderId: "196128046249",
+  appId: "1:196128046249:web:b3ceca4d3dc04e5d8abdb8"
+};
+
+// 3. This line initializes Firebase and wakes it up
+const app = initializeApp(firebaseConfig);
+
+// 4. This 'db' variable represents your cloud database. We will use it next!
+const db = getFirestore(app);
+
+// This function grabs your form data and pushes it to the cloud
+async function saveToCloud() {
+  // A. Grab the values you typed into your website frontend boxes
+  const userDescription = document.getElementById("descriptionInput").value;
+  const userAmount = document.getElementById("amountInput").value;
+
+  // B. Convert the dollar amount into cents to prevent math errors (e.g., $10.50 becomes 1050)
+  const amountInCents = Math.round(parseFloat(userAmount) * 100);
+
+  try {
+    // C. This line pushes the data straight into your Firebase "transactions" folder!
+    const docRef = await addDoc(collection(db, "transactions"), {
+      description: userDescription,
+      amount: amountInCents,
+      date: new Date()
+    });
+    
+    alert("Success! Stored safely in the cloud with ID: " + docRef.id);
+    
+  } catch (error) {
+    console.error("Error adding data to cloud: ", error);
+    alert("Something went wrong saving the data.");
+  }
+}
+
+// D. Attach this function to your HTML button click
+document.getElementById("mySubmitButton").addEventListener("click", saveToCloud);
+
 const SVG_MOCK_AVATARS = {
   devi: `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' width='100' height='100'><rect width='100' height='100' fill='%231e293b'/><circle cx='50' cy='40' r='22' fill='%23f59e0b'/><path d='M15 85 C15 65, 30 55, 50 55 C70 55, 85 65, 85 85 Z' fill='%23d97706'/></svg>`,
   ganesh: `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' width='100' height='100'><rect width='100' height='100' fill='%231e293b'/><circle cx='50' cy='40' r='22' fill='%233b82f6'/><path d='M15 85 C15 65, 30 55, 50 55 C70 55, 85 65, 85 85 Z' fill='%232563eb'/></svg>`,
