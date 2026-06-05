@@ -13,22 +13,49 @@ const firebaseConfig = {
   appId: "1:196128046249:web:b3ceca4d3dc04e5d8abdb8"
 };
 
-// Initialize Firebase Compat Safely
+// Initialize Firebase Compat Safely and Dynamically
 let db = null;
 let firebaseEnabled = false;
+let firebaseInitializationPromise = null;
 const isLocalProtocol = window.location.protocol === 'file:';
 
-if (typeof firebase !== 'undefined' && !isLocalProtocol) {
-  try {
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.firestore();
-    firebaseEnabled = true;
-  } catch (error) {
-    console.error("Firebase initialization failed:", error);
-  }
-} else {
-  console.warn("Firebase SDK not loaded or running on file:// protocol. Local storage fallback active.");
+function loadScript(url) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = url;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
 }
+
+async function initializeFirebaseDynamic() {
+  if (isLocalProtocol) {
+    console.warn("Running on file:// protocol. Local storage fallback active.");
+    return false;
+  }
+  try {
+    // Load Firebase App Compat first, then load dependencies in parallel
+    await loadScript("https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js");
+    await Promise.all([
+      loadScript("https://www.gstatic.com/firebasejs/12.14.0/firebase-auth-compat.js"),
+      loadScript("https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore-compat.js")
+    ]);
+    
+    if (typeof firebase !== 'undefined') {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      firebaseEnabled = true;
+      return true;
+    }
+  } catch (error) {
+    console.error("Failed to load or initialize Firebase SDKs dynamically:", error);
+  }
+  return false;
+}
+
+// Start loading immediately in the background
+firebaseInitializationPromise = initializeFirebaseDynamic();
 
 // Custom SVG Avatars & Icons for Preloaded Mock Data to give it an instant premium feel
 const SVG_MOCK_AVATARS = {
@@ -91,14 +118,29 @@ class FinanceApp {
     // Initialize application events
     this.initEventListeners();
     
-    // Initialize Auth state listener
-    if (firebaseEnabled) {
-      firebase.auth().onAuthStateChanged((user) => {
-        this.handleAuthStateChange(user);
-      });
-    } else {
+    // Initialize Auth state listener after Firebase dynamic scripts load
+    firebaseInitializationPromise.then((success) => {
+      if (success && firebaseEnabled) {
+        let authResolved = false;
+        firebase.auth().onAuthStateChanged((user) => {
+          authResolved = true;
+          this.handleAuthStateChange(user);
+        });
+        
+        // Safety timeout: if Firebase Auth doesn't resolve in 3 seconds, force hide loader
+        setTimeout(() => {
+          if (!authResolved) {
+            console.warn("Firebase Auth resolution timed out. Falling back to local/cached status check.");
+            this.initLocalAuth();
+          }
+        }, 3000);
+      } else {
+        this.initLocalAuth();
+      }
+    }).catch((err) => {
+      console.error("Firebase init promise rejected:", err);
       this.initLocalAuth();
-    }
+    });
   }
 
   // Handle Firebase Auth changes
@@ -113,12 +155,21 @@ class FinanceApp {
       if (btnSettingsToggle) btnSettingsToggle.style.display = "inline-flex";
       this.loadFromStorage();
     } else {
-      if (loginOverlay) loginOverlay.classList.add("active");
-      if (btnSettingsToggle) btnSettingsToggle.style.display = "none";
-      if (appBodyLayout) appBodyLayout.classList.remove("settings-open");
-      
-      this.state.groups = [];
-      this.render();
+      // Check if we have an active local/offline backdoor session
+      const localUser = localStorage.getItem("vm_finance_local_user");
+      if (localUser) {
+        this.isLocalLoggedIn = true;
+        if (loginOverlay) loginOverlay.classList.remove("active");
+        if (btnSettingsToggle) btnSettingsToggle.style.display = "inline-flex";
+        this.loadFromStorageLocalOnly();
+      } else {
+        if (loginOverlay) loginOverlay.classList.add("active");
+        if (btnSettingsToggle) btnSettingsToggle.style.display = "none";
+        if (appBodyLayout) appBodyLayout.classList.remove("settings-open");
+        
+        this.state.groups = [];
+        this.render();
+      }
     }
 
     if (authLoadingOverlay) {
@@ -2468,10 +2519,26 @@ class FinanceApp {
 }
 
 // Instantiate application safely, executing immediately if DOM is already fully loaded
-if (document.readyState === "complete" || document.readyState === "interactive") {
-  window.app = new FinanceApp();
-} else {
-  document.addEventListener("DOMContentLoaded", () => {
+try {
+  if (document.readyState === "complete" || document.readyState === "interactive") {
     window.app = new FinanceApp();
-  });
+  } else {
+    document.addEventListener("DOMContentLoaded", () => {
+      try {
+        window.app = new FinanceApp();
+      } catch (e) {
+        console.error("Critical app instantiation error:", e);
+        const loader = document.getElementById("auth-loading-overlay");
+        if (loader) loader.style.display = "none";
+        const loginOverlay = document.getElementById("login-overlay");
+        if (loginOverlay) loginOverlay.classList.add("active");
+      }
+    });
+  }
+} catch (e) {
+  console.error("Critical app startup error:", e);
+  const loader = document.getElementById("auth-loading-overlay");
+  if (loader) loader.style.display = "none";
+  const loginOverlay = document.getElementById("login-overlay");
+  if (loginOverlay) loginOverlay.classList.add("active");
 }

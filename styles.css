@@ -2119,4 +2119,38 @@ body.light-theme .auth-loading-overlay {
   }
 }
 
+/* Company Logo Custom Styles */
+.logo-img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #000000;
+  padding: 2px;
+  border: 1px solid var(--accent-gold);
+  box-shadow: var(--shadow-glow);
+  transition: transform 0.3s ease;
+}
+
+.logo-img:hover {
+  transform: rotate(360deg);
+}
+
+.logo-img-large {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #000000;
+  padding: 4px;
+  border: 2px solid var(--accent-gold);
+  box-shadow: var(--shadow-glow);
+}
+
+.login-logo-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 15px;
+}
+
 
