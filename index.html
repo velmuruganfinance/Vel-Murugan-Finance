@@ -31,6 +31,10 @@
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           Storage: 0.00 / 5.00 MB
         </div>
+        <div class="storage-badge" id="cloud-status">
+          <span id="cloud-status-icon">☁️</span>
+          <span id="cloud-status-text">Cloud: Connecting...</span>
+        </div>
         <button class="btn btn-secondary" id="btn-export" title="Export JSON Database Backup">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           Backup
@@ -542,6 +546,10 @@
       </div>
     </div>
   </div>
+
+  <!-- Firebase SDK Compat Core -->
+  <script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore-compat.js"></script>
 
   <!-- Core Javascript Application Logic -->
   <script src="app.js"></script>

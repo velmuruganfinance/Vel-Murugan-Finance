@@ -202,6 +202,28 @@ header {
   gap: 6px;
 }
 
+#cloud-status {
+  transition: all 0.3s ease;
+}
+
+#cloud-status.cloud-syncing {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: var(--accent-gold);
+}
+
+#cloud-status.cloud-synced {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: var(--accent-emerald);
+}
+
+#cloud-status.cloud-error {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: var(--accent-red);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

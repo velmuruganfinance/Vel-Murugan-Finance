@@ -4,9 +4,20 @@
  * Local Canvas-based Image Compression, Database Backups, and an EMI declining ledger.
  */
 
-// Custom SVG Avatars & Icons for Preloaded Mock Data to give it an instant premium feel
-// 1. Tell your website to download Firebase tools from the internet
+const firebaseConfig = {
+  apiKey: "AIzaSyD063RHy5P6l9VqBCuaL9jY6uW48uxTtBg",
+  authDomain: "vel-murugan-finance123.firebaseapp.com",
+  projectId: "vel-murugan-finance123",
+  storageBucket: "vel-murugan-finance123.firebasestorage.app",
+  messagingSenderId: "196128046249",
+  appId: "1:196128046249:web:b3ceca4d3dc04e5d8abdb8"
+};
 
+// Initialize Firebase Compat
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// Custom SVG Avatars & Icons for Preloaded Mock Data to give it an instant premium feel
 const SVG_MOCK_AVATARS = {
   devi: `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' width='100' height='100'><rect width='100' height='100' fill='%231e293b'/><circle cx='50' cy='40' r='22' fill='%23f59e0b'/><path d='M15 85 C15 65, 30 55, 50 55 C70 55, 85 65, 85 85 Z' fill='%23d97706'/></svg>`,
   ganesh: `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' width='100' height='100'><rect width='100' height='100' fill='%231e293b'/><circle cx='50' cy='40' r='22' fill='%233b82f6'/><path d='M15 85 C15 65, 30 55, 50 55 C70 55, 85 65, 85 85 Z' fill='%232563eb'/></svg>`,
@@ -72,8 +83,8 @@ class FinanceApp {
     this.render();
   }
 
-  // Save changes to LocalStorage and update the storage metrics badge
-  saveToStorage() {
+  // Save changes to LocalStorage and update the storage metrics badge, then sync to Firestore
+  async saveToStorage(specificGroup = null) {
     try {
       const dataStr = JSON.stringify(this.state.groups);
       localStorage.setItem("vm_finance_groups", dataStr);
@@ -82,28 +93,91 @@ class FinanceApp {
       alert("Local storage is full! Canvas compressor prevented crash. Please export backup and clear data.");
       console.error(e);
     }
+
+    this.updateCloudStatus("syncing");
+    try {
+      const groupToSync = specificGroup || this.getActiveGroup();
+      if (groupToSync) {
+        await db.collection("groups").doc(groupToSync.id).set(groupToSync);
+        this.updateCloudStatus("synced");
+      } else {
+        this.updateCloudStatus("synced");
+      }
+    } catch (error) {
+      console.error("Firestore sync error:", error);
+      this.updateCloudStatus("error");
+    }
   }
 
-  // Load database from LocalStorage, falls back to preloaded mock data if empty
-  loadFromStorage() {
+  // Load database from LocalStorage (cache-first), then fetch and merge from Firestore
+  async loadFromStorage() {
+    // 1. Immediately load local cache to keep it fast and responsive
     const rawData = localStorage.getItem("vm_finance_groups");
     if (rawData) {
       try {
         this.state.groups = JSON.parse(rawData);
-        
-        // Migrate double quotes in legacy SVG mock data to single quotes to prevent HTML breaking
-        let migrated = false;
-        const replaceQuotes = (str) => {
-          if (typeof str === 'string' && str.startsWith('data:image/svg+xml;') && str.includes('"')) {
-            migrated = true;
-            return str.replace(/"/g, "'");
-          }
-          return str;
-        };
+        this.migrateLegacyData();
+        this.render();
+      } catch (e) {
+        console.error("Error parsing localStorage data, resetting...", e);
+      }
+    } else {
+      this.loadMockData();
+    }
+    this.updateStorageStatusBadge();
 
-        this.state.groups.forEach(g => {
-          if (g.leaderPhoto) g.leaderPhoto = replaceQuotes(g.leaderPhoto);
-          Object.values(g.categories).forEach(catList => {
+    // 2. Fetch latest data from Firestore in the background
+    this.updateCloudStatus("syncing", "Cloud: Loading data...");
+    try {
+      const querySnapshot = await db.collection("groups").get();
+      const fetchedGroups = [];
+      querySnapshot.forEach((document) => {
+        fetchedGroups.push(document.data());
+      });
+
+      if (fetchedGroups.length > 0) {
+        this.state.groups = fetchedGroups;
+        this.migrateLegacyData();
+        // Update local storage cache
+        try {
+          localStorage.setItem("vm_finance_groups", JSON.stringify(this.state.groups));
+          this.updateStorageStatusBadge();
+        } catch (e) {
+          console.error(e);
+        }
+        this.render();
+        this.updateCloudStatus("synced", "Cloud Synced ✓");
+      } else {
+        // Firestore is empty. If we have local groups, upload them.
+        if (this.state.groups.length > 0) {
+          this.updateCloudStatus("syncing", "Cloud: Initializing database...");
+          await this.uploadAllGroupsToFirestore();
+        } else {
+          this.updateCloudStatus("synced");
+        }
+      }
+    } catch (error) {
+      console.error("Error loading from Firestore:", error);
+      this.updateCloudStatus("error", "Offline / Sync Error ⚠️");
+    }
+  }
+
+  // Helper to migrate quotes in legacy SVG mock data
+  migrateLegacyData() {
+    let migrated = false;
+    const replaceQuotes = (str) => {
+      if (typeof str === 'string' && str.startsWith('data:image/svg+xml;') && str.includes('"')) {
+        migrated = true;
+        return str.replace(/"/g, "'");
+      }
+      return str;
+    };
+
+    this.state.groups.forEach(g => {
+      if (g.leaderPhoto) g.leaderPhoto = replaceQuotes(g.leaderPhoto);
+      if (g.categories) {
+        Object.values(g.categories).forEach(catList => {
+          if (Array.isArray(catList)) {
             catList.forEach(sub => {
               if (sub.members) {
                 sub.members.forEach(m => {
@@ -113,20 +187,88 @@ class FinanceApp {
                 });
               }
             });
-          });
+          }
         });
-
-        if (migrated) {
-          this.saveToStorage();
-        }
-      } catch (e) {
-        console.error("Error parsing localStorage data, resetting...", e);
-        this.loadMockData();
       }
-    } else {
-      this.loadMockData();
+    });
+
+    if (migrated) {
+      try {
+        localStorage.setItem("vm_finance_groups", JSON.stringify(this.state.groups));
+      } catch (e) {
+        console.error(e);
+      }
     }
-    this.updateStorageStatusBadge();
+  }
+
+  // Update cloud sync status UI badge
+  updateCloudStatus(status, message = "") {
+    const el = document.getElementById("cloud-status");
+    if (!el) return;
+    
+    el.classList.remove("cloud-syncing", "cloud-synced", "cloud-error");
+    
+    const textEl = document.getElementById("cloud-status-text");
+    const iconEl = document.getElementById("cloud-status-icon");
+    
+    if (status === "syncing") {
+      el.classList.add("cloud-syncing");
+      if (textEl) textEl.innerText = message || "Cloud: Syncing...";
+      if (iconEl) iconEl.innerText = "🔄";
+    } else if (status === "synced") {
+      el.classList.add("cloud-synced");
+      if (textEl) textEl.innerText = message || "Cloud Synced ✓";
+      if (iconEl) iconEl.innerText = "☁️";
+    } else if (status === "error") {
+      el.classList.add("cloud-error");
+      if (textEl) textEl.innerText = message || "Sync Error ⚠️";
+      if (iconEl) iconEl.innerText = "❌";
+    }
+  }
+
+  // Upload all memory groups to Firestore (used on first-run mock loading or JSON imports)
+  async uploadAllGroupsToFirestore() {
+    this.updateCloudStatus("syncing", "Cloud: Syncing database...");
+    try {
+      const syncPromises = [];
+      for (const group of this.state.groups) {
+        syncPromises.push(db.collection("groups").doc(group.id).set(group));
+      }
+      await Promise.all(syncPromises);
+      this.updateCloudStatus("synced");
+    } catch (e) {
+      console.error("Error uploading all groups:", e);
+      this.updateCloudStatus("error");
+    }
+  }
+
+  // Clear all group documents from Firestore (used during Reset Database and before JSON imports)
+  async clearAllGroupsFromFirestore() {
+    this.updateCloudStatus("syncing", "Cloud: Clearing database...");
+    try {
+      const querySnapshot = await db.collection("groups").get();
+      const deletePromises = [];
+      querySnapshot.forEach((document) => {
+        deletePromises.push(document.ref.delete());
+      });
+      await Promise.all(deletePromises);
+      this.updateCloudStatus("synced");
+    } catch (e) {
+      console.error("Error clearing Firestore:", e);
+      this.updateCloudStatus("error");
+    }
+  }
+
+  // Delete specific group document from Firestore
+  async deleteGroupFromFirestore(groupId) {
+    this.updateCloudStatus("syncing");
+    try {
+      await db.collection("groups").doc(groupId).delete();
+      this.updateCloudStatus("synced");
+    } catch (e) {
+      console.error("Firestore delete error:", e);
+      this.updateCloudStatus("error");
+    }
   }
 
   // Update storage size monitor badge at the top
@@ -287,6 +429,7 @@ class FinanceApp {
         this.state.currentSubgroupId = null;
         this.state.currentMemberId = null;
         this.saveToStorage();
+        this.clearAllGroupsFromFirestore();
         this.render();
       }
     });
@@ -708,7 +851,7 @@ class FinanceApp {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>\${title}</title>
+        <title>${title}</title>
         <style>
           body {
             font-family: 'Inter', sans-serif;
@@ -766,10 +909,10 @@ class FinanceApp {
         </style>
       </head>
       <body>
-        <h2>\${title}</h2>
-        <p class="date-printed">Printed on: \${new Date().toLocaleString('en-IN')}</p>
+        <h2>${title}</h2>
+        <p class="date-printed">Printed on: ${new Date().toLocaleString('en-IN')}</p>
         <div class="print-table-wrapper">
-          \${tableClone.outerHTML}
+          ${tableClone.outerHTML}
         </div>
         <script>
           window.onload = function() {
@@ -888,12 +1031,14 @@ class FinanceApp {
       return;
     }
 
+    let targetGroup = null;
     if (groupId) {
       // Edit mode
       const group = this.state.groups.find(g => g.id === groupId);
       if (group) {
         group.name = nameVal;
         group.leaderPhoto = this.tempLeaderPhoto;
+        targetGroup = group;
       }
     } else {
       // Create mode
@@ -904,9 +1049,10 @@ class FinanceApp {
         categories: { KL: [], ML: [], WL: [], STL: [] }
       };
       this.state.groups.push(newGroup);
+      targetGroup = newGroup;
     }
 
-    this.saveToStorage();
+    this.saveToStorage(targetGroup);
     this.closeModal("modal-group");
     this.render();
 
@@ -927,6 +1073,7 @@ class FinanceApp {
       }
       
       this.saveToStorage();
+      this.deleteGroupFromFirestore(groupId);
       this.render();
     }
   }
@@ -2097,6 +2244,9 @@ class FinanceApp {
           // simple schema validation
           this.state.groups = parsed;
           this.saveToStorage();
+          this.clearAllGroupsFromFirestore().then(() => {
+            this.uploadAllGroupsToFirestore();
+          });
           this.navigateToHome();
           alert("Database Backup Imported Successfully! UI updated.");
         } else {
