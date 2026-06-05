@@ -78,9 +78,26 @@ class FinanceApp {
     // Initialize application events
     this.initEventListeners();
     
-    // Load existing database
-    this.loadFromStorage();
-    this.render();
+    // Initialize Auth state listener
+    firebase.auth().onAuthStateChanged((user) => {
+      const loginOverlay = document.getElementById("login-overlay");
+      const btnLogout = document.getElementById("btn-logout");
+      
+      if (user) {
+        if (loginOverlay) loginOverlay.classList.remove("active");
+        if (btnLogout) btnLogout.style.display = "inline-flex";
+        
+        // Load existing database from Firestore
+        this.loadFromStorage();
+      } else {
+        if (loginOverlay) loginOverlay.classList.add("active");
+        if (btnLogout) btnLogout.style.display = "none";
+        
+        // Clear state to prevent screen leak
+        this.state.groups = [];
+        this.render();
+      }
+    });
   }
 
   // Save changes to LocalStorage and update the storage metrics badge, then sync to Firestore
@@ -409,6 +426,56 @@ class FinanceApp {
 
   // Attaches event handlers to UI inputs, form submissions, and buttons
   initEventListeners() {
+    // Login form submission handler
+    const loginForm = document.getElementById("login-form");
+    if (loginForm) {
+      loginForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const email = document.getElementById("login-email").value.trim();
+        const password = document.getElementById("login-password").value;
+        const errorMsg = document.getElementById("login-error-msg");
+        const btnSubmit = document.getElementById("btn-login-submit");
+        
+        if (errorMsg) errorMsg.style.display = "none";
+        if (btnSubmit) {
+          btnSubmit.disabled = true;
+          btnSubmit.innerText = "Signing in...";
+        }
+        
+        firebase.auth().signInWithEmailAndPassword(email, password)
+          .then(() => {
+            if (btnSubmit) {
+              btnSubmit.disabled = false;
+              btnSubmit.innerText = "Sign In Securely";
+            }
+          })
+          .catch((error) => {
+            console.error("Login error:", error);
+            if (errorMsg) {
+              errorMsg.innerText = error.message || "Invalid credentials. Please try again.";
+              errorMsg.style.display = "block";
+            }
+            if (btnSubmit) {
+              btnSubmit.disabled = false;
+              btnSubmit.innerText = "Sign In Securely";
+            }
+          });
+      });
+    }
+
+    // Logout button click handler
+    const btnLogout = document.getElementById("btn-logout");
+    if (btnLogout) {
+      btnLogout.addEventListener("click", () => {
+        if (confirm("Are you sure you want to sign out of the ledger portal?")) {
+          firebase.auth().signOut().then(() => {
+            // Reload page for clean state
+            window.location.reload();
+          });
+        }
+      });
+    }
+
     // Export database backup
     document.getElementById("btn-export").addEventListener("click", () => this.exportData());
     
