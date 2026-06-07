@@ -1404,14 +1404,14 @@ class FinanceApp {
     document.getElementById("preview-m-cheque-placeholder").style.display = "flex";
     document.getElementById("label-m-cheque-status").innerText = "No Document Uploaded";
 
-    // Standard resets
+    // Standard resets — KL defaults: 50000 principal, 14000 interest, 16 installments, 4000 EMI
     document.getElementById("input-m-name").value = "";
     document.getElementById("input-m-id").value = "";
     document.getElementById("input-m-phone1").value = "";
     document.getElementById("input-m-phone2").value = "";
     document.getElementById("input-m-aadhar-no").value = "";
-    document.getElementById("input-m-amount").value = 64000;
-    document.getElementById("input-m-interest").value = 0;
+    document.getElementById("input-m-amount").value = 50000;
+    document.getElementById("input-m-interest").value = 14000;
     document.getElementById("input-m-installments").value = 16;
     document.getElementById("input-m-emi").value = 4000;
     document.getElementById("input-m-issue-date").value = new Date().toISOString().substring(0, 10);
@@ -1480,13 +1480,13 @@ class FinanceApp {
       // Default Gender radio to Male
       document.getElementById("gender-male").checked = true;
       
-      // Auto pre-fill First / Last EMI months based on issue date
+      // Auto pre-fill First / Last EMI months based on today's date
       const today = new Date();
-      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-      const firstEmiStr = nextMonth.toISOString().substring(0, 7); // yyyy-mm
-      
-      const lastMonth = new Date(today.getFullYear(), today.getMonth() + 16, 1);
-      const lastEmiStr = lastMonth.toISOString().substring(0, 7);
+      const firstEmiDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+      const firstEmiStr = firstEmiDate.toISOString().substring(0, 7);
+      const installments = parseInt(document.getElementById("input-m-installments").value) || 16;
+      const lastEmiDate = new Date(today.getFullYear(), today.getMonth() + 1 + (installments - 1), 1);
+      const lastEmiStr = lastEmiDate.toISOString().substring(0, 7);
 
       document.getElementById("input-m-first-emi").value = firstEmiStr;
       document.getElementById("input-m-last-emi").value = lastEmiStr;
@@ -1508,6 +1508,49 @@ class FinanceApp {
       if (groupLastEmi) groupLastEmi.style.display = "";
       inputInstallments.readOnly = false;
     }
+
+    // Helper: compute last EMI month from first EMI + (installments - 1) months
+    const computeLastEmi = () => {
+      const firstVal = document.getElementById("input-m-first-emi").value;
+      const inst = parseInt(document.getElementById("input-m-installments").value) || 16;
+      if (!firstVal) return;
+      // Parse year and month from "yyyy-mm" string safely
+      const [yr, mo] = firstVal.split("-").map(Number);
+      // last EMI = firstEMI + (installments - 1) months
+      // e.g. Feb 2026 + 15 months = May 2027
+      const lastDate = new Date(yr, mo - 1 + (inst - 1), 1);
+      const lastYr = lastDate.getFullYear();
+      const lastMo = String(lastDate.getMonth() + 1).padStart(2, "0");
+      document.getElementById("input-m-last-emi").value = `${lastYr}-${lastMo}`;
+    };
+
+    // On issue-date change → auto-set first EMI to next month, recalculate last EMI
+    const updateEmiFromIssueDate = () => {
+      const val = document.getElementById("input-m-issue-date").value;
+      if (!val) return;
+      // Parse date parts safely (avoids UTC timezone shift from new Date("yyyy-mm-dd"))
+      const [iYr, iMo] = val.split("-").map(Number);
+      // First EMI = next month after issue month
+      const firstEmiDate = new Date(iYr, iMo, 1); // iMo is already 0-indexed next month (Jan=1 → Feb=iMo=1 → new Date(yr,1,1)=Feb)
+      const firstYr = firstEmiDate.getFullYear();
+      const firstMo = String(firstEmiDate.getMonth() + 1).padStart(2, "0");
+      document.getElementById("input-m-first-emi").value = `${firstYr}-${firstMo}`;
+      computeLastEmi();
+    };
+
+    const issueDateInput = document.getElementById("input-m-issue-date");
+    issueDateInput.onchange = updateEmiFromIssueDate;
+    issueDateInput.oninput = updateEmiFromIssueDate;
+
+    // On first EMI change → recalculate last EMI
+    const firstEmiInput = document.getElementById("input-m-first-emi");
+    firstEmiInput.onchange = () => computeLastEmi();
+    firstEmiInput.oninput = () => computeLastEmi();
+
+    // On installments change → recalculate last EMI
+    const installmentsInput = document.getElementById("input-m-installments");
+    installmentsInput.onchange = () => computeLastEmi();
+    installmentsInput.oninput = () => computeLastEmi();
 
     this.openModal("modal-member");
   }
