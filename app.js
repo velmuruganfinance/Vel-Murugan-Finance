@@ -1238,6 +1238,121 @@ class FinanceApp {
     document.getElementById(modalId).classList.remove("active");
   }
 
+  // ── Camera Capture Methods ──────────────────────────────────────────────────
+
+  // Opens the live camera modal and starts the device camera stream
+  openCameraModal(targetInputId) {
+    this._cameraTargetId = targetInputId;
+    const video = document.getElementById("camera-video-stream");
+    const noSupportMsg = document.getElementById("camera-no-support-msg");
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      video.style.display = "none";
+      noSupportMsg.style.display = "block";
+      this.openModal("modal-camera");
+      return;
+    }
+
+    video.style.display = "block";
+    noSupportMsg.style.display = "none";
+
+    // Prefer the rear camera on mobile devices
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+      .then(stream => {
+        this._cameraStream = stream;
+        video.srcObject = stream;
+      })
+      .catch(err => {
+        alert("Camera access denied or unavailable: " + err.message);
+        return;
+      });
+
+    this.openModal("modal-camera");
+  }
+
+  // Stops the camera stream and closes the modal
+  closeCameraModal() {
+    if (this._cameraStream) {
+      this._cameraStream.getTracks().forEach(t => t.stop());
+      this._cameraStream = null;
+    }
+    const video = document.getElementById("camera-video-stream");
+    video.srcObject = null;
+    this.closeModal("modal-camera");
+  }
+
+  // Captures the current video frame and saves it to the target upload area
+  capturePhoto() {
+    const video = document.getElementById("camera-video-stream");
+    const canvas = document.getElementById("camera-capture-canvas");
+
+    if (!video.videoWidth || !video.videoHeight) {
+      alert("Camera is not ready yet. Please wait a moment and try again.");
+      return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
+    // Mapping of input IDs to their preview/placeholder/status elements
+    const map = {
+      "input-leader-photo": {
+        prev: "preview-leader-photo",
+        placeholder: "preview-leader-placeholder",
+        removeBtn: "btn-remove-leader-photo",
+        status: null
+      },
+      "input-member-photo": {
+        prev: "preview-member-photo",
+        placeholder: "preview-member-placeholder",
+        removeBtn: null,
+        status: null
+      },
+      "input-m-aadhar": {
+        prev: "preview-m-aadhar",
+        placeholder: "preview-m-aadhar-placeholder",
+        removeBtn: null,
+        status: "label-m-aadhar-status",
+        statusText: "Photo Captured"
+      },
+      "input-m-cheque": {
+        prev: "preview-m-cheque",
+        placeholder: "preview-m-cheque-placeholder",
+        removeBtn: null,
+        status: "label-m-cheque-status",
+        statusText: "Photo Captured"
+      }
+    };
+
+    const cfg = map[this._cameraTargetId];
+    if (cfg) {
+      const prevEl = document.getElementById(cfg.prev);
+      const phEl = document.getElementById(cfg.placeholder);
+      prevEl.src = dataUrl;
+      prevEl.style.display = "block";
+      if (phEl) phEl.style.display = "none";
+      if (cfg.removeBtn) {
+        const rb = document.getElementById(cfg.removeBtn);
+        if (rb) rb.style.display = "block";
+      }
+      if (cfg.status) {
+        document.getElementById(cfg.status).innerText = cfg.statusText;
+      }
+
+      // Store in temp vars so save actions pick them up
+      if (this._cameraTargetId === "input-leader-photo") this.tempLeaderPhoto = dataUrl;
+      if (this._cameraTargetId === "input-member-photo") this.tempMemberPhoto = dataUrl;
+      if (this._cameraTargetId === "input-m-aadhar")     this.tempAadharPhoto = dataUrl;
+      if (this._cameraTargetId === "input-m-cheque")     this.tempChequePhoto = dataUrl;
+    }
+
+    this.closeCameraModal();
+  }
+
+  // ── End Camera Capture Methods ──────────────────────────────────────────────
+
   // Clears group modal fields
   openGroupModal(group = null) {
     const title = document.getElementById("group-modal-title");

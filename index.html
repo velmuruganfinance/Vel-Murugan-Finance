@@ -302,6 +302,7 @@
               <button class="btn btn-secondary">Upload Photo</button>
               <input type="file" id="input-leader-photo" class="file-upload-input" accept="image/*">
             </div>
+            <button class="btn btn-secondary btn-camera" onclick="app.openCameraModal('input-leader-photo')" title="Take Photo with Camera">📷 Camera</button>
             <button class="btn btn-danger btn-icon-only" id="btn-remove-leader-photo" style="display:none;" title="Remove Photo">&times;</button>
           </div>
         </div>
@@ -335,6 +336,7 @@
                 <button class="btn btn-secondary" style="padding:6px 12px; font-size:11px;">Upload</button>
                 <input type="file" id="input-member-photo" class="file-upload-input" accept="image/*">
               </div>
+              <button class="btn btn-secondary btn-camera" onclick="app.openCameraModal('input-member-photo')" title="Take Photo with Camera" style="padding:6px 10px; font-size:11px;">📷</button>
             </div>
           </div>
           
@@ -442,9 +444,12 @@
                   <span class="doc-status" id="label-m-aadhar-status" style="font-size:9px;">No Document Uploaded</span>
                 </div>
               </div>
-              <div class="file-upload-btn-wrapper">
-                <button class="btn btn-secondary" style="padding:5px 10px; font-size:11px;">Select File</button>
-                <input type="file" id="input-m-aadhar" class="file-upload-input" accept="image/*">
+              <div style="display:flex; gap:6px; align-items:center;">
+                <div class="file-upload-btn-wrapper">
+                  <button class="btn btn-secondary" style="padding:5px 10px; font-size:11px;">Select File</button>
+                  <input type="file" id="input-m-aadhar" class="file-upload-input" accept="image/*">
+                </div>
+                <button class="btn btn-secondary btn-camera" onclick="app.openCameraModal('input-m-aadhar')" title="Take Photo with Camera" style="padding:5px 8px; font-size:11px;">📷</button>
               </div>
             </div>
           </div>
@@ -460,9 +465,12 @@
                   <span class="doc-status" id="label-m-cheque-status" style="font-size:9px;">No Document Uploaded</span>
                 </div>
               </div>
-              <div class="file-upload-btn-wrapper">
-                <button class="btn btn-secondary" style="padding:5px 10px; font-size:11px;">Select File</button>
-                <input type="file" id="input-m-cheque" class="file-upload-input" accept="image/*">
+              <div style="display:flex; gap:6px; align-items:center;">
+                <div class="file-upload-btn-wrapper">
+                  <button class="btn btn-secondary" style="padding:5px 10px; font-size:11px;">Select File</button>
+                  <input type="file" id="input-m-cheque" class="file-upload-input" accept="image/*">
+                </div>
+                <button class="btn btn-secondary btn-camera" onclick="app.openCameraModal('input-m-cheque')" title="Take Photo with Camera" style="padding:5px 8px; font-size:11px;">📷</button>
               </div>
             </div>
           </div>
@@ -630,6 +638,28 @@
         
         <button type="submit" class="btn-login-submit-custom" id="btn-login-submit">LOGIN</button>
       </form>
+    </div>
+  </div>
+
+  <!-- Camera Capture Modal -->
+  <div class="modal-overlay" id="modal-camera">
+    <div class="modal-container" style="max-width:500px;">
+      <div class="modal-header">
+        <h3 class="modal-title">📷 Take Photo</h3>
+        <button class="modal-close" onclick="app.closeCameraModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="text-align:center; padding: 16px;">
+        <div style="position:relative; border-radius:12px; overflow:hidden; background:#000; line-height:0;">
+          <video id="camera-video-stream" autoplay playsinline style="width:100%; border-radius:12px; background:#000; max-height:340px; display:block;"></video>
+          <div id="camera-no-support-msg" style="display:none; color:#aaa; padding:40px 20px; font-size:14px;">Camera not available on this device/browser.</div>
+        </div>
+        <canvas id="camera-capture-canvas" style="display:none;"></canvas>
+        <p style="font-size:12px; color:var(--text-secondary); margin-top:10px; margin-bottom:0;">Point the camera and press Capture to take a photo.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeCameraModal()">Cancel</button>
+        <button class="btn btn-primary" id="btn-camera-capture" onclick="app.capturePhoto()">📸 Capture</button>
+      </div>
     </div>
   </div>
 
