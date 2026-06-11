@@ -1179,6 +1179,69 @@ header {
   box-shadow: var(--shadow-emerald-glow);
 }
 
+/* STL Segment — Interest & Repaid checkbox styles */
+.stl-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+  padding: 2px 0;
+}
+
+.stl-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.stl-checkbox {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.stl-checkbox.interest-check {
+  accent-color: var(--accent-gold);
+}
+
+.stl-checkbox.repaid-check {
+  accent-color: var(--accent-emerald);
+}
+
+
+/* STL row highlight states */
+.emi-table tr.stl-interest-row td {
+  color: rgba(245, 158, 11, 0.8);
+  background: rgba(245, 158, 11, 0.03);
+}
+.emi-table tr.stl-repaid-row td {
+  color: rgba(16, 185, 129, 0.85);
+  background: rgba(16, 185, 129, 0.05);
+  font-weight: 700;
+}
+.stl-closed-banner {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-emerald);
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* light theme overrides */
+body.light-theme .emi-table tr.stl-interest-row td { color: #b45309; background: rgba(251, 191, 36, 0.06); }
+body.light-theme .emi-table tr.stl-repaid-row td { color: #059669; background: rgba(16, 185, 129, 0.06); }
+
 /* ==========================================================================
    MODALS AND FORMS
    ========================================================================== */

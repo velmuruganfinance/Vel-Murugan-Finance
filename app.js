@@ -1619,19 +1619,42 @@ class FinanceApp {
 
     // WL Category Customizations
     const isWL = this.state.currentCategory === "WL";
+    const isSTL = this.state.currentCategory === "STL";
     const groupFirstEmi = document.getElementById("form-group-first-emi");
     const groupLastEmi = document.getElementById("form-group-last-emi");
     const inputInstallments = document.getElementById("input-m-installments");
+    const amountLabel = document.querySelector('label[for="input-m-amount"]');
+    const interestLabel = document.querySelector('label[for="input-m-interest"]');
+    const installmentsParent = inputInstallments ? inputInstallments.closest('.form-group') : null;
+    const emiParent = document.getElementById('input-m-emi') ? document.getElementById('input-m-emi').closest('.form-group') : null;
 
     if (isWL) {
       if (groupFirstEmi) groupFirstEmi.style.display = "none";
       if (groupLastEmi) groupLastEmi.style.display = "none";
       inputInstallments.value = 10;
       inputInstallments.readOnly = true;
+      if (installmentsParent) installmentsParent.style.display = "";
+      if (emiParent) emiParent.style.display = "";
+      if (amountLabel) amountLabel.innerText = "Loan Amount (INR) *";
+      if (interestLabel) interestLabel.innerText = "Interest Amount (INR) *";
+    } else if (isSTL) {
+      // STL: no fixed installments, no EMI — only principal + monthly interest
+      if (installmentsParent) installmentsParent.style.display = "none";
+      if (emiParent) emiParent.style.display = "none";
+      if (groupLastEmi) groupLastEmi.style.display = "none";
+      if (groupFirstEmi) groupFirstEmi.style.display = "";
+      inputInstallments.value = 0;
+      inputInstallments.readOnly = true;
+      if (amountLabel) amountLabel.innerText = "Principle Amount (INR) *";
+      if (interestLabel) interestLabel.innerText = "Interest Amount (INR) *";
     } else {
       if (groupFirstEmi) groupFirstEmi.style.display = "";
       if (groupLastEmi) groupLastEmi.style.display = "";
       inputInstallments.readOnly = false;
+      if (installmentsParent) installmentsParent.style.display = "";
+      if (emiParent) emiParent.style.display = "";
+      if (amountLabel) amountLabel.innerText = "Loan Amount (INR) *";
+      if (interestLabel) interestLabel.innerText = "Interest Amount (INR) *";
     }
 
     // Helper: compute last EMI month from first EMI + (installments - 1) months
@@ -1704,7 +1727,9 @@ class FinanceApp {
     const genderEl = document.querySelector('input[name="gender"]:checked');
     const gender = genderEl ? genderEl.value : "Male";
 
-    if (!name || !mId || !phone1 || amount <= 0 || installments <= 0 || emi <= 0) {
+    const isSTL = this.state.currentCategory === "STL";
+
+    if (!name || !mId || !phone1 || amount <= 0 || (!isSTL && (installments <= 0 || emi <= 0))) {
       alert("Please fill in all required fields (*) with valid values.");
       if (btnSave) btnSave.disabled = false;
       return;
@@ -1779,30 +1804,38 @@ class FinanceApp {
         member.memberId = mId;
         member.phone1 = phone1;
         member.phone2 = phone2;
-        member.gender = gender; // Save gender
+        member.gender = gender;
         member.aadharNo = aadharNo;
         member.amount = amount;
         member.interest = interest;
-        
-        // If installments number changed, dynamically adjust ticks array
-        if (member.installments !== installments) {
-          const oldTicks = member.ticks || [];
-          const newTicks = Array(installments).fill(false);
-          for (let i = 0; i < Math.min(oldTicks.length, installments); i++) {
-            newTicks[i] = oldTicks[i];
-          }
-          member.ticks = newTicks;
-        }
-        
-        member.installments = installments;
-        member.emi = emi;
         member.issueDate = issueDate;
-        member.firstEmiMonth = firstEmiMonth;
-        member.lastEmiMonth = lastEmiMonth;
         member.address = address;
         member.photo = this.tempMemberPhoto;
         member.aadharPhoto = this.tempAadharPhoto;
         member.chequePhoto = this.tempChequePhoto;
+
+        if (isSTL) {
+          // STL: preserve existing stlTicks, update monthly interest
+          member.installments = 0;
+          member.emi = interest;
+          member.firstEmiMonth = firstEmiMonth;
+          member.lastEmiMonth = "";
+          if (!member.stlTicks) member.stlTicks = [];
+        } else {
+          // If installments number changed, dynamically adjust ticks array
+          if (member.installments !== installments) {
+            const oldTicks = member.ticks || [];
+            const newTicks = Array(installments).fill(false);
+            for (let i = 0; i < Math.min(oldTicks.length, installments); i++) {
+              newTicks[i] = oldTicks[i];
+            }
+            member.ticks = newTicks;
+          }
+          member.installments = installments;
+          member.emi = emi;
+          member.firstEmiMonth = firstEmiMonth;
+          member.lastEmiMonth = lastEmiMonth;
+        }
       }
     } else {
       // Create Mode
@@ -1812,25 +1845,35 @@ class FinanceApp {
         memberId: mId,
         phone1: phone1,
         phone2: phone2,
-        gender: gender, // Save gender
+        gender: gender,
         aadharNo: aadharNo,
         amount: amount,
         interest: interest,
-        installments: installments,
-        emi: emi,
         issueDate: issueDate,
         firstEmiMonth: firstEmiMonth,
-        lastEmiMonth: lastEmiMonth,
         address: address,
         photo: this.tempMemberPhoto,
         aadharPhoto: this.tempAadharPhoto,
-        chequePhoto: this.tempChequePhoto,
-        ticks: Array(installments).fill(false) // initialize installment ticks
+        chequePhoto: this.tempChequePhoto
       };
-      
+
+      if (isSTL) {
+        // STL: dynamic open-ended tracking; no fixed installments
+        newMember.installments = 0;
+        newMember.emi = interest;
+        newMember.lastEmiMonth = "";
+        newMember.stlTicks = []; // array of: null | "interest" | "repaid"
+        newMember.ticks = [];    // keep compatible
+      } else {
+        newMember.installments = installments;
+        newMember.emi = emi;
+        newMember.lastEmiMonth = lastEmiMonth;
+        newMember.ticks = Array(installments).fill(false);
+      }
+
       if (!subgroup.members) subgroup.members = [];
       subgroup.members.push(newMember);
-      this.state.currentMemberId = newMember.id; // Auto select new member
+      this.state.currentMemberId = newMember.id;
     }
 
     this.saveToStorage();
@@ -1900,9 +1943,13 @@ class FinanceApp {
   // Handles checkbox tick changes on EMI declining table.
   // Applies tick changes to ALL members in the active subgroup equally,
   // so a single click keeps the entire group in sync.
+  // NOTE: STL members are intentionally excluded — they use toggleSTLTick instead.
   toggleInstallmentTick(rowIdx) {
     const activeMember = this.getActiveMember();
     if (!activeMember) return;
+
+    // STL members use their own separate handler
+    if (this.state.currentCategory === "STL") return;
 
     const subgroup = this.getActiveSubgroup();
     if (!subgroup || !subgroup.members || subgroup.members.length === 0) return;
@@ -1955,9 +2002,36 @@ class FinanceApp {
     this.renderActiveMemberTable();
   }
 
+  // STL-specific tick toggle: handles "interest" (monthly interest collected) or
+  // "repaid" (full principal returned) — updates ONLY the active member, not the group.
+  toggleSTLTick(rowIdx, type) {
+    const member = this.getActiveMember();
+    if (!member) return;
+    if (!member.stlTicks) member.stlTicks = [];
+
+    const current = member.stlTicks[rowIdx];
+
+    if (type === "interest") {
+      member.stlTicks[rowIdx] = current === "interest" ? null : "interest";
+    } else if (type === "repaid") {
+      member.stlTicks[rowIdx] = current === "repaid" ? null : "repaid";
+    }
+
+    this.saveToStorage();
+    this.renderActiveMemberTable();
+  }
+
   // Helper to calculate outstanding balance for a member
   getMemberOutstanding(member) {
     if (!member) return 0;
+
+    // STL: outstanding is ALWAYS the principal (interest payments don't reduce it).
+    // Once the "repaid" tick is set, outstanding becomes 0.
+    if (member.stlTicks !== undefined) {
+      const hasRepaid = Array.isArray(member.stlTicks) && member.stlTicks.some(t => t === "repaid");
+      return hasRepaid ? 0 : (member.amount || 0);
+    }
+
     const principalAmount = member.amount || 64000;
     const interestAmount = member.interest || 0;
     const startingReferenceAmount = principalAmount + interestAmount;
@@ -2353,20 +2427,15 @@ class FinanceApp {
           <div class="empty-state-icon">👤</div>
           <h3>No Member Selected</h3>
           <p>Select a member from the left panel, or click the gold plus button to create a new client card.</p>
-          <button class="btn btn-primary" onclick="app.openMemberModal(null)">
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-            Add New Member
-          </button>
+          <button class="btn btn-primary" onclick="app.openMemberModal(null)">Add Client Card</button>
         </div>
       `;
-      // Clear right table column as well
-      this.dom.memberTableColumn.innerHTML = "";
       return;
     }
-
     const avatar = member.photo ? member.photo : `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='%2394a3b8'><circle cx='50' cy='50' r='45'/><path d='M10 90 Q50 40 90 90 Z' fill='%23475569'/></svg>`;
 
     const isWL = this.state.currentCategory === "WL";
+    const isSTL = this.state.currentCategory === "STL";
 
     // Format numbers
     const formatINR = (val) => "₹" + (val || 0).toLocaleString('en-IN');
@@ -2404,6 +2473,35 @@ class FinanceApp {
     let phoneHtml = member.phone1;
     if (member.phone2) phoneHtml += ` / ${member.phone2}`;
 
+    // STL outstanding is always the principal (until repaid)
+    const stlHasRepaid = isSTL && Array.isArray(member.stlTicks) && member.stlTicks.some(t => t === "repaid");
+    const stlOutstanding = stlHasRepaid ? 0 : (member.amount || 0);
+
+    const stlMetaExtra = isSTL ? `
+      <div class="meta-item">
+        <span class="meta-label">Monthly Interest</span>
+        <span class="meta-value amount">${formatINR(member.interest)}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Loan Issue Date</span>
+        <span class="meta-value">${member.issueDate || 'N/A'}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Start Month</span>
+        <span class="meta-value">${this.formatMonthString(member.firstEmiMonth)}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Loan Status</span>
+        <span class="meta-value" style="color: ${stlHasRepaid ? 'var(--accent-emerald)' : 'var(--accent-gold)'}; font-weight:700;">
+          ${stlHasRepaid ? '✅ Fully Repaid' : '⏳ Principal Outstanding'}
+        </span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Outstanding Principal</span>
+        <span class="meta-value amount" style="font-size:15px; color:var(--accent-gold);">${formatINR(stlOutstanding)}</span>
+      </div>
+    ` : ``;
+
     container.innerHTML = `
       <!-- Header with Avatar and Admin controls -->
       <div class="profile-card-header">
@@ -2439,7 +2537,12 @@ class FinanceApp {
           <span class="meta-label">Principal Amount</span>
           <span class="meta-value amount">${formatINR(member.amount)}</span>
         </div>
+        <div class="meta-item">
+          <span class="meta-label">Aadhar Number</span>
+          <span class="meta-value">${member.aadharNo || 'N/A'}</span>
+        </div>
         
+        ${isSTL ? stlMetaExtra : `
         <div class="meta-item">
           <span class="meta-label">Interest Amount (Flat)</span>
           <span class="meta-value amount">${formatINR(member.interest)}</span>
@@ -2448,12 +2551,6 @@ class FinanceApp {
           <span class="meta-label">Installments Plan</span>
           <span class="meta-value">${member.installments || (isWL ? 10 : 16)} ${isWL ? 'Weeks' : 'Months'}</span>
         </div>
-
-        <div class="meta-item">
-          <span class="meta-label">Aadhar Number</span>
-          <span class="meta-value">${member.aadharNo || 'N/A'}</span>
-        </div>
-        
         <div class="meta-item">
           <span class="meta-label">EMI Premium</span>
           <span class="meta-value amount">${formatINR(member.emi)}</span>
@@ -2462,7 +2559,6 @@ class FinanceApp {
           <span class="meta-label">Loan Issue Date</span>
           <span class="meta-value">${member.issueDate || 'N/A'}</span>
         </div>
-
         ${isWL ? '' : `
         <div class="meta-item">
           <span class="meta-label">First EMI Month</span>
@@ -2472,6 +2568,7 @@ class FinanceApp {
           <span class="meta-label">Last EMI Month</span>
           <span class="meta-value">${this.formatMonthString(member.lastEmiMonth)}</span>
         </div>
+        `}
         `}
 
         <div class="meta-item meta-value-full">
@@ -2538,6 +2635,119 @@ class FinanceApp {
     const tableWrapper = container.querySelector(".table-wrapper");
     const savedScrollTop = tableWrapper ? tableWrapper.scrollTop : 0;
 
+    const isSTL = this.state.currentCategory === "STL";
+
+    // ── STL SPECIAL RENDERING ─────────────────────────────────────────────────
+    if (isSTL) {
+      if (!member.stlTicks) member.stlTicks = [];
+
+      const principal = member.amount || 0;
+      const monthlyInterest = member.interest || 0;
+      const stlTicks = member.stlTicks;
+      const hasRepaid = stlTicks.some(t => t === "repaid");
+      const interestPaidCount = stlTicks.filter(t => t === "interest" || t === "repaid").length;
+
+      // Generate month labels dynamically from firstEmiMonth
+      // Show all recorded rows + 1 more (for the next un-recorded month), unless repaid
+      const numRows = hasRepaid ? stlTicks.length : stlTicks.length + 1;
+
+      let tableRowsHtml = "";
+      for (let i = 0; i < numRows; i++) {
+        const sno = i + 1;
+        const rowMonthLabel = this.calculateIncrementedMonth(member.firstEmiMonth, i);
+        const tick = stlTicks[i] || null;
+        const isInterest = tick === "interest";
+        const isRepaid = tick === "repaid";
+        const rowClass = isRepaid ? "stl-repaid-row" : (isInterest ? "stl-interest-row" : "");
+        const intBtnClass = isInterest ? "active" : "";
+        const repBtnClass = isRepaid ? "active" : "";
+
+        // Lock buttons after repaid (no further edits to subsequent rows)
+        const lockAfterRepaid = hasRepaid && !isRepaid && !isInterest ? "disabled" : "";
+
+        tableRowsHtml += `
+          <tr class="${rowClass}">
+            <td class="col-sno">${sno}</td>
+            <td class="col-date">${rowMonthLabel}</td>
+            <td class="col-emi" style="color:var(--accent-gold);">₹${monthlyInterest.toLocaleString('en-IN')}</td>
+            <td class="col-balance" style="color:var(--accent-gold); font-weight:700;">₹${isRepaid ? 0 : principal.toLocaleString('en-IN')}</td>
+            <td class="col-action">
+              <div class="stl-checkbox-group">
+                <label class="stl-checkbox-label">
+                  <input type="checkbox" class="stl-checkbox interest-check" ${isInterest ? 'checked' : ''} ${lockAfterRepaid}
+                    onchange="app.toggleSTLTick(${i}, 'interest')">
+                  <span>Interest</span>
+                </label>
+                <label class="stl-checkbox-label">
+                  <input type="checkbox" class="stl-checkbox repaid-check" ${isRepaid ? 'checked' : ''} ${lockAfterRepaid}
+                    onchange="app.toggleSTLTick(${i}, 'repaid')">
+                  <span>Full Payment</span>
+                </label>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+
+      const closedBanner = hasRepaid
+        ? `<div class="stl-closed-banner">✅ LOAN FULLY REPAID — Account Closed</div>`
+        : ``;
+
+      container.innerHTML = `
+        <!-- STL Header -->
+        <div class="ledger-header">
+          <div class="progress-circular-wrapper">
+            <div class="circular-progress" style="background: conic-gradient(${hasRepaid ? '#10b981' : '#f59e0b'} 360deg, #232e48 0deg)">
+              <span class="progress-text" style="font-size:9px;">${hasRepaid ? '✅' : '⏳'}</span>
+            </div>
+            <div class="progress-info">
+              <span class="progress-info-title">STL Interest Track</span>
+              <span class="progress-info-subtitle" style="color:var(--accent-gold); font-weight:600;">
+                ${interestPaidCount} Month${interestPaidCount !== 1 ? 's' : ''} Collected
+              </span>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase;">Principal Outstanding</div>
+            <div style="font-size: 15px; font-weight: 700; color:var(--accent-gold);">
+              ₹${hasRepaid ? '0' : principal.toLocaleString('en-IN')}
+            </div>
+          </div>
+        </div>
+        ${closedBanner}
+        <!-- STL INTEREST TRACKING TABLE -->
+        <div class="table-wrapper">
+          <table class="emi-table">
+            <thead>
+              <tr>
+                <th class="col-sno">S.No</th>
+                <th class="col-date">Month</th>
+                <th class="col-emi">Interest</th>
+                <th class="col-balance">Principal</th>
+                <th class="col-action" style="width:22%;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRowsHtml}
+              <tr class="summary-row">
+                <td colspan="2">TOTAL INTEREST</td>
+                <td class="col-emi">₹${(interestPaidCount * monthlyInterest).toLocaleString('en-IN')}</td>
+                <td class="col-balance" style="color:var(--accent-gold);">₹${hasRepaid ? 0 : principal.toLocaleString('en-IN')}</td>
+                <td style="font-size:9px; text-align:center; color:var(--text-secondary);">
+                  ${interestPaidCount} collected
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      const newTableWrapper = container.querySelector(".table-wrapper");
+      if (newTableWrapper) newTableWrapper.scrollTop = savedScrollTop;
+      return;
+    }
+    // ── END STL ───────────────────────────────────────────────────────────────
+
     const isWL = this.state.currentCategory === "WL";
     const totalRows = isWL ? 10 : (member.installments || 16);
     const emi = member.emi || 4000;
@@ -2560,26 +2770,15 @@ class FinanceApp {
     const paidCount = member.ticks.filter(t => t).length;
     const paidPercent = Math.round((paidCount / totalRows) * 100) || 0;
     
-    // Math formulas: 4th column is 'Balance Amount' which has initialization at Loan Amount minus EMI of that row
-    // and subsequent row subtracts further EMIs.
-    // Summing columns totals:
     let emiColSum = 0;
     let tableRowsHtml = "";
     let currentBalance = startingReferenceAmount;
 
     for (let i = 0; i < totalRows; i++) {
       const sno = i + 1;
-      
-      // Calculate row date (or week index for WL segment)
       const rowDate = isWL ? `W${sno}` : this.calculateIncrementedMonth(member.firstEmiMonth, i);
-      
-      // Declining mathematical schedule: currentRow Balance = priorRow Balance - rowEMI
       currentBalance = currentBalance - emi;
-      
-      // Safeguard against negatives
       const displayBalance = Math.max(0, currentBalance);
-      
-      // Sum totals
       emiColSum += emi;
       
       const isTicked = member.ticks[i];
@@ -2601,7 +2800,6 @@ class FinanceApp {
       `;
     }
 
-    // Calculation total sum for final row
     const totalAmountPaid = paidCount * emi;
     const remainingBalance = Math.max(0, startingReferenceAmount - totalAmountPaid);
 
