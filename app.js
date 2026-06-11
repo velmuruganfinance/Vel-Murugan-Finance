@@ -1897,36 +1897,61 @@ class FinanceApp {
     this.openModal("modal-doc-viewer");
   }
 
-  // Handles checkbox tick changes on EMI declining table
+  // Handles checkbox tick changes on EMI declining table.
+  // Applies tick changes to ALL members in the active subgroup equally,
+  // so a single click keeps the entire group in sync.
   toggleInstallmentTick(rowIdx) {
-    const member = this.getActiveMember();
-    if (!member) return;
+    const activeMember = this.getActiveMember();
+    if (!activeMember) return;
 
-    const totalRows = this.state.currentCategory === "WL" ? 10 : (member.installments || 16);
-    if (!member.ticks || member.ticks.length !== totalRows) {
-      const old = member.ticks || [];
-      member.ticks = Array(totalRows).fill(false);
-      for (let i = 0; i < Math.min(old.length, totalRows); i++) {
-        member.ticks[i] = old[i];
+    const subgroup = this.getActiveSubgroup();
+    if (!subgroup || !subgroup.members || subgroup.members.length === 0) return;
+
+    const isWL = this.state.currentCategory === "WL";
+
+    // Determine tick direction from the ACTIVE member's current state at rowIdx
+    const activeTotalRows = isWL ? 10 : (activeMember.installments || 16);
+    if (!activeMember.ticks || activeMember.ticks.length !== activeTotalRows) {
+      const old = activeMember.ticks || [];
+      activeMember.ticks = Array(activeTotalRows).fill(false);
+      for (let i = 0; i < Math.min(old.length, activeTotalRows); i++) {
+        activeMember.ticks[i] = old[i];
       }
     }
+    const shouldTick = !activeMember.ticks[rowIdx]; // true = checking, false = unchecking
 
-    const currentlyTicked = member.ticks[rowIdx];
-    if (!currentlyTicked) {
-      // Checking: mark all prior rows as ticked
-      for (let i = 0; i <= rowIdx; i++) {
-        member.ticks[i] = true;
+    // Apply the same tick/untick to EVERY member in the subgroup
+    subgroup.members.forEach(m => {
+      const totalRows = isWL ? 10 : (m.installments || 16);
+
+      // Ensure ticks array is properly sized for each member
+      if (!m.ticks || m.ticks.length !== totalRows) {
+        const old = m.ticks || [];
+        m.ticks = Array(totalRows).fill(false);
+        for (let i = 0; i < Math.min(old.length, totalRows); i++) {
+          m.ticks[i] = old[i];
+        }
       }
-    } else {
-      // Unchecking: mark all subsequent rows as unticked
-      for (let i = rowIdx; i < totalRows; i++) {
-        member.ticks[i] = false;
+
+      // Only apply if rowIdx is within this member's installment range
+      if (rowIdx < totalRows) {
+        if (shouldTick) {
+          // Checking: mark all prior rows (up to rowIdx) as ticked
+          for (let i = 0; i <= rowIdx; i++) {
+            m.ticks[i] = true;
+          }
+        } else {
+          // Unchecking: mark all subsequent rows (from rowIdx) as unticked
+          for (let i = rowIdx; i < totalRows; i++) {
+            m.ticks[i] = false;
+          }
+        }
       }
-    }
-    
+    });
+
     this.saveToStorage();
-    
-    // Re-render only columns columns to avoid profile reloading flicker
+
+    // Re-render the right table column for the active member only (no flicker)
     this.renderActiveMemberTable();
   }
 
