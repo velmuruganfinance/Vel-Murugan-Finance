@@ -969,27 +969,34 @@ class FinanceApp {
     const list = group.categories[this.state.currentCategory] || [];
     let html = "";
     let grandTotalMembers = 0;
+    let grandTotalEmi = 0;
     let grandTotalOutstanding = 0;
 
     if (list.length === 0) {
-      html = `<tr><td colspan="3" style="text-align:center;">No subgroups found in this category.</td></tr>`;
+      html = `<tr><td colspan="4" style="text-align:center;">No subgroups found in this category.</td></tr>`;
     } else {
       list.forEach(sub => {
         const memberCount = sub.members ? sub.members.length : 0;
         let subgroupOutstanding = 0;
+        let subgroupTotalEmi = 0;
         if (sub.members) {
           sub.members.forEach(m => {
             subgroupOutstanding += this.getMemberOutstanding(m);
+            subgroupTotalEmi += (m.emi || 0);
           });
         }
         
         grandTotalMembers += memberCount;
+        grandTotalEmi += subgroupTotalEmi;
         grandTotalOutstanding += subgroupOutstanding;
 
         html += `
           <tr>
             <td style="font-weight: 600;">${sub.name}</td>
             <td style="text-align: center;">${memberCount}</td>
+            <td style="text-align: right; font-family: monospace; font-weight: 600;">
+              ₹${subgroupTotalEmi.toLocaleString('en-IN')}
+            </td>
             <td style="text-align: right; font-family: monospace; font-weight: 600; color: var(--accent-gold);">
               ₹${subgroupOutstanding.toLocaleString('en-IN')}
             </td>
@@ -1002,6 +1009,9 @@ class FinanceApp {
         <tr style="border-top: 2px solid var(--border-color); font-weight: 700; background: rgba(0,0,0,0.02);">
           <td>GRAND TOTAL</td>
           <td style="text-align: center;">${grandTotalMembers}</td>
+          <td style="text-align: right; font-family: monospace;">
+            ₹${grandTotalEmi.toLocaleString('en-IN')}
+          </td>
           <td style="text-align: right; font-family: monospace; color: var(--accent-gold);">
             ₹${grandTotalOutstanding.toLocaleString('en-IN')}
           </td>
