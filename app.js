@@ -716,7 +716,7 @@ class FinanceApp {
     };
 
     // Subgroup Chart Print/CSV
-    bindExport("btn-print-subgroup-chart", () => this.printChart("subgroup-chart-table", "Vel Murugan Finance - Subgroup Analytics"));
+    bindExport("btn-print-subgroup-chart", () => this.printSubgroupChart());
     bindExport("btn-csv-subgroup-chart", () => this.exportChartToCSV("subgroup-chart-table", "subgroup_analytics.csv"));
 
     // Group Chart Print/CSV
@@ -1187,6 +1187,74 @@ class FinanceApp {
             setTimeout(function() { window.close(); }, 500);
           }
         </script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }
+
+  // Prints the subgroup chart PDF with group leader & segment details in the header
+  printSubgroupChart() {
+    const tableEl = document.getElementById("subgroup-chart-table");
+    if (!tableEl) return;
+
+    const group = this.getActiveGroup();
+    const category = this.state.currentCategory || "";
+    const groupName = group ? group.name : "Vel Murugan Finance";
+    const leaderPhoto = group ? group.leaderPhoto : null;
+
+    const segmentLabels = {
+      KL: "KL Segment – Short-term Agricultural & Small Business Loans",
+      ML: "ML Segment – Monthly Installment Commercial Ledgers",
+      WL: "WL Segment – Weekly Installment Retail Ledgers",
+      STL: "STL Segment – Short Term Emergency Loans"
+    };
+    const segmentLabel = segmentLabels[category] || category;
+
+    const printWindow = window.open("", "_blank", "width=900,height=700");
+    if (!printWindow) {
+      alert("Popup blocker prevented printing. Please allow popups for this site.");
+      return;
+    }
+
+    const tableClone = tableEl.cloneNode(true);
+    const photoHtml = leaderPhoto
+      ? `<img src="${leaderPhoto}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid #d97706;">`
+      : `<div style="width:64px;height:64px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:28px;">👤</div>`;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Vel Murugan Finance - Subgroup Analytics</title>
+        <style>
+          body { font-family: 'Inter', sans-serif; color: #1e293b; padding: 40px; margin: 0; }
+          .pdf-header { display: flex; align-items: center; gap: 20px; padding-bottom: 18px; border-bottom: 2px solid #e2e8f0; margin-bottom: 6px; }
+          .pdf-header-info h2 { font-family: 'Outfit', sans-serif; color: #0f172a; margin: 0 0 4px; font-size: 22px; }
+          .pdf-header-info .leader-name { font-size: 15px; font-weight: 700; color: #1e293b; margin: 0 0 3px; }
+          .pdf-header-info .segment-badge { display: inline-block; background: #fef3c7; color: #92400e; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 12px; letter-spacing: 0.3px; }
+          p.date-printed { font-size: 12px; color: #64748b; margin: 8px 0 24px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th { background-color: #f8fafc; color: #475569; font-weight: 700; font-size: 13px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; padding: 12px 8px; }
+          td { padding: 12px 8px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+          tr:nth-child(even) td { background-color: #fdfdfd; }
+          tr:last-child td { font-weight: 700; background-color: #f8fafc; border-top: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8; }
+        </style>
+      </head>
+      <body>
+        <div class="pdf-header">
+          ${photoHtml}
+          <div class="pdf-header-info">
+            <h2>Vel Murugan Finance – Subgroup Analytics</h2>
+            <p class="leader-name">Primary Group: ${groupName}</p>
+            <span class="segment-badge">${segmentLabel}</span>
+          </div>
+        </div>
+        <p class="date-printed">Generated on: ${new Date().toLocaleString('en-IN')}</p>
+        <div>${tableClone.outerHTML}</div>
+        <script>
+          window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); }
+        <\/script>
       </body>
       </html>
     `);
