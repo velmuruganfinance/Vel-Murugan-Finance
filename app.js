@@ -905,10 +905,10 @@ class FinanceApp {
     // Iterate over all groups
     this.state.groups.forEach(g => {
       // Calculate outstanding for each category
-      const klOut = this.getCategoryOutstanding(g.categories.KL || []);
-      const mlOut = this.getCategoryOutstanding(g.categories.ML || []);
-      const wlOut = this.getCategoryOutstanding(g.categories.WL || []);
-      const stlOut = this.getCategoryOutstanding(g.categories.STL || []);
+      const klOut = this.getCategoryOutstanding(g.categories.KL || [], "KL");
+      const mlOut = this.getCategoryOutstanding(g.categories.ML || [], "ML");
+      const wlOut = this.getCategoryOutstanding(g.categories.WL || [], "WL");
+      const stlOut = this.getCategoryOutstanding(g.categories.STL || [], "STL");
       const totalOut = klOut + mlOut + wlOut + stlOut;
 
       const formatVal = (val) => val > 0 ? "₹" + val.toLocaleString('en-IN') : "₹0";
@@ -936,10 +936,10 @@ class FinanceApp {
     // Add a Grand Total row
     let totalKL = 0, totalML = 0, totalWL = 0, totalSTL = 0;
     this.state.groups.forEach(g => {
-      totalKL += this.getCategoryOutstanding(g.categories.KL || []);
-      totalML += this.getCategoryOutstanding(g.categories.ML || []);
-      totalWL += this.getCategoryOutstanding(g.categories.WL || []);
-      totalSTL += this.getCategoryOutstanding(g.categories.STL || []);
+      totalKL += this.getCategoryOutstanding(g.categories.KL || [], "KL");
+      totalML += this.getCategoryOutstanding(g.categories.ML || [], "ML");
+      totalWL += this.getCategoryOutstanding(g.categories.WL || [], "WL");
+      totalSTL += this.getCategoryOutstanding(g.categories.STL || [], "STL");
     });
     const grandTotal = totalKL + totalML + totalWL + totalSTL;
 
@@ -2059,9 +2059,26 @@ class FinanceApp {
     this.renderActiveMemberTable();
   }
 
+  getEmiForIndex(member, i, category = null) {
+    const cat = category || this.state.currentCategory;
+    const installments = member.installments || 16;
+    const emi = member.emi || 4000;
+    if (cat === "KL" && Number(installments) === 22) {
+      if (i >= 20) {
+        // Last 2 EMIs = remaining balance after 20 regular EMIs, split equally
+        const totalAmount = (member.amount || 0) + (member.interest || 0);
+        const remainingAfter20 = Math.max(0, totalAmount - (20 * emi));
+        return remainingAfter20 / 2;
+      }
+      return emi;
+    }
+    return emi;
+  }
+
   // Helper to calculate outstanding balance for a member
-  getMemberOutstanding(member) {
+  getMemberOutstanding(member, category = null) {
     if (!member) return 0;
+    const cat = category || this.state.currentCategory;
 
     // STL: outstanding is ALWAYS the principal (interest payments don't reduce it).
     // Once the "repaid" tick is set, outstanding becomes 0.
@@ -2073,25 +2090,27 @@ class FinanceApp {
     const principalAmount = member.amount || 64000;
     const interestAmount = member.interest || 0;
     const startingReferenceAmount = principalAmount + interestAmount;
-    const emi = member.emi || 4000;
     const totalRows = member.installments || 16;
     
-    let paidCount = 0;
+    let totalAmountPaid = 0;
     if (member.ticks) {
-      paidCount = member.ticks.filter(t => t).length;
+      member.ticks.forEach((t, idx) => {
+        if (t) {
+          totalAmountPaid += this.getEmiForIndex(member, idx, cat);
+        }
+      });
     }
-    const totalAmountPaid = paidCount * emi;
     return Math.max(0, startingReferenceAmount - totalAmountPaid);
   }
 
   // Helper to calculate total outstanding balance for a category segment
-  getCategoryOutstanding(categoryList) {
+  getCategoryOutstanding(categoryList, categoryKey = null) {
     let total = 0;
     if (categoryList) {
       categoryList.forEach(sub => {
         if (sub.members) {
           sub.members.forEach(m => {
-            total += this.getMemberOutstanding(m);
+            total += this.getMemberOutstanding(m, categoryKey);
           });
         }
       });
@@ -2288,7 +2307,7 @@ class FinanceApp {
       const count = list.length;
       document.getElementById(countBadgeId).innerText = `${count} Subgroups`;
       
-      const outstanding = this.getCategoryOutstanding(list);
+      const outstanding = this.getCategoryOutstanding(list, catKey);
       const amountEl = document.getElementById(amountBadgeId);
       if (amountEl) {
         amountEl.innerText = `Outstanding: ₹${outstanding.toLocaleString('en-IN')}`;
@@ -2788,7 +2807,6 @@ class FinanceApp {
 
     const isWL = this.state.currentCategory === "WL";
     const totalRows = isWL ? 10 : (member.installments || 16);
-    const emi = member.emi || 4000;
     
     // Retrieve principal amount. If missing, fallback to 64000
     const principalAmount = member.amount || 64000;
@@ -2815,9 +2833,10 @@ class FinanceApp {
     for (let i = 0; i < totalRows; i++) {
       const sno = i + 1;
       const rowDate = isWL ? `W${sno}` : this.calculateIncrementedMonth(member.firstEmiMonth, i);
-      currentBalance = currentBalance - emi;
+      const rowEmi = this.getEmiForIndex(member, i, this.state.currentCategory);
+      currentBalance = currentBalance - rowEmi;
       const displayBalance = Math.max(0, currentBalance);
-      emiColSum += emi;
+      emiColSum += rowEmi;
       
       const isTicked = member.ticks[i];
       const rowClass = isTicked ? "paid-row" : "";
@@ -2827,7 +2846,7 @@ class FinanceApp {
         <tr class="${rowClass}">
           <td class="col-sno">${sno}</td>
           <td class="col-date">${rowDate}</td>
-          <td class="col-emi">₹${emi.toLocaleString('en-IN')}</td>
+          <td class="col-emi">₹${rowEmi.toLocaleString('en-IN')}</td>
           <td class="col-balance">₹${displayBalance.toLocaleString('en-IN')}</td>
           <td class="col-action">
             <button class="tick-btn ${tickClass}" onclick="app.toggleInstallmentTick(${i})" title="${isTicked ? 'Mark Unpaid' : 'Mark Paid'}">
@@ -2838,7 +2857,14 @@ class FinanceApp {
       `;
     }
 
-    const totalAmountPaid = paidCount * emi;
+    let totalAmountPaid = 0;
+    if (member.ticks) {
+      member.ticks.forEach((t, idx) => {
+        if (t) {
+          totalAmountPaid += this.getEmiForIndex(member, idx, this.state.currentCategory);
+        }
+      });
+    }
     const remainingBalance = Math.max(0, startingReferenceAmount - totalAmountPaid);
 
     container.innerHTML = `
