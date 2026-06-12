@@ -1942,7 +1942,8 @@ class FinanceApp {
 
   // Handles checkbox tick changes on EMI declining table.
   // Applies tick changes to ALL members in the active subgroup equally (by default),
-  // so a single click keeps the entire group in sync, except for members unlinked from group sync.
+  // so a single click keeps the entire group in sync by EMI MONTH (not row serial number),
+  // except for members unlinked from group sync.
   // NOTE: STL members are intentionally excluded — they use toggleSTLTick instead.
   toggleInstallmentTick(rowIdx) {
     const activeMember = this.getActiveMember();
@@ -1967,6 +1968,21 @@ class FinanceApp {
     }
     const shouldTick = !activeMember.ticks[rowIdx]; // true = checking, false = unchecking
 
+    // ── Helper: convert a "yyyy-mm" firstEmiMonth + row offset → "yyyy-mm" key ──
+    const getEmiMonthKey = (firstEmiMonth, offset) => {
+      if (!firstEmiMonth) return null;
+      const parts = firstEmiMonth.split("-");
+      if (parts.length !== 2) return null;
+      let year = parseInt(parts[0]);
+      let monthIdx = parseInt(parts[1]) - 1; // 0-indexed
+      monthIdx += offset;
+      if (monthIdx >= 12) {
+        year += Math.floor(monthIdx / 12);
+        monthIdx = monthIdx % 12;
+      }
+      return `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
+    };
+
     if (activeMember.syncWithGroup === false) {
       // Unsynced member: only apply to themselves
       if (shouldTick) {
@@ -1979,6 +1995,10 @@ class FinanceApp {
         }
       }
     } else {
+      // ── Determine the clicked EMI month from the ACTIVE member (for non-WL) ──
+      // For WL (weekly), no EMI months — fall back to index-based sync as before.
+      const clickedEmiMonthKey = isWL ? null : getEmiMonthKey(activeMember.firstEmiMonth, rowIdx);
+
       // Synced member: apply the same tick/untick to all synced members in the subgroup
       subgroup.members.forEach(m => {
         if (m.syncWithGroup === false) return; // skip unsynced members
@@ -1994,18 +2014,38 @@ class FinanceApp {
           }
         }
 
-        // Only apply if rowIdx is within this member's installment range
-        if (rowIdx < totalRows) {
-          if (shouldTick) {
-            // Checking: mark all prior rows (up to rowIdx) as ticked
-            for (let i = 0; i <= rowIdx; i++) {
-              m.ticks[i] = true;
+        // For non-WL: resolve target row index by matching EMI month key,
+        // so "May 2026" on one member correctly maps to "May 2026" on another
+        // member regardless of their individual serial number / start date.
+        let targetIdx;
+        if (isWL || !clickedEmiMonthKey || !m.firstEmiMonth) {
+          // WL or missing month data: use raw row index (legacy behaviour)
+          targetIdx = rowIdx;
+        } else {
+          // Find the row in this member that matches the clicked EMI month
+          targetIdx = -1;
+          for (let i = 0; i < totalRows; i++) {
+            if (getEmiMonthKey(m.firstEmiMonth, i) === clickedEmiMonthKey) {
+              targetIdx = i;
+              break;
             }
-          } else {
-            // Unchecking: mark all subsequent rows (from rowIdx) as unticked
-            for (let i = rowIdx; i < totalRows; i++) {
-              m.ticks[i] = false;
-            }
+          }
+          // If clicked month is before this member's schedule → tick nothing (or untick nothing)
+          if (targetIdx === -1) {
+            if (shouldTick) return; // month hasn't started for this member
+            else return;            // nothing to untick
+          }
+        }
+
+        if (shouldTick) {
+          // Checking: mark all prior rows (up to targetIdx) as ticked
+          for (let i = 0; i <= targetIdx; i++) {
+            m.ticks[i] = true;
+          }
+        } else {
+          // Unchecking: mark all subsequent rows (from targetIdx) as unticked
+          for (let i = targetIdx; i < totalRows; i++) {
+            m.ticks[i] = false;
           }
         }
       });
