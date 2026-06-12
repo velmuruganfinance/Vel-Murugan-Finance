@@ -2051,8 +2051,8 @@ class FinanceApp {
       return `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
     };
 
-    if (activeMember.syncWithGroup === false) {
-      // Unsynced member: only apply to themselves
+    if (activeMember.syncWithGroup === false || isWL) {
+      // Unsynced member or WL segment: only apply to themselves
       if (shouldTick) {
         for (let i = 0; i <= rowIdx; i++) {
           activeMember.ticks[i] = true;
@@ -2064,14 +2064,13 @@ class FinanceApp {
       }
     } else {
       // ── Determine the clicked EMI month from the ACTIVE member (for non-WL) ──
-      // For WL (weekly), no EMI months — fall back to index-based sync as before.
-      const clickedEmiMonthKey = isWL ? null : getEmiMonthKey(activeMember.firstEmiMonth, rowIdx);
+      const clickedEmiMonthKey = getEmiMonthKey(activeMember.firstEmiMonth, rowIdx);
 
       // Synced member: apply the same tick/untick to all synced members in the subgroup
       subgroup.members.forEach(m => {
         if (m.syncWithGroup === false) return; // skip unsynced members
 
-        const totalRows = isWL ? 10 : (m.installments || 16);
+        const totalRows = (m.installments || 16);
 
         // Ensure ticks array is properly sized for each member
         if (!m.ticks || m.ticks.length !== totalRows) {
@@ -2082,12 +2081,12 @@ class FinanceApp {
           }
         }
 
-        // For non-WL: resolve target row index by matching EMI month key,
+        // Resolve target row index by matching EMI month key,
         // so "May 2026" on one member correctly maps to "May 2026" on another
         // member regardless of their individual serial number / start date.
         let targetIdx;
-        if (isWL || !clickedEmiMonthKey || !m.firstEmiMonth) {
-          // WL or missing month data: use raw row index (legacy behaviour)
+        if (!clickedEmiMonthKey || !m.firstEmiMonth) {
+          // missing month data: use raw row index (legacy behaviour)
           targetIdx = rowIdx;
         } else {
           // Find the row in this member that matches the clicked EMI month
@@ -2998,22 +2997,24 @@ class FinanceApp {
         </div>
       </div>
 
+      ${(this.state.currentCategory !== "WL" && this.state.currentCategory !== "STL") ? `
       <!-- Group Sync Override Control Bar -->
       <div class="sync-control-bar" style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); padding:10px 15px; border-radius:10px; margin-bottom:15px; font-size:13px;">
         <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:16px;">${member.syncWithGroup !== false ? '🔄' : '👤'}</span>
+          <span style="font-size:16px;">\${member.syncWithGroup !== false ? '🔄' : '👤'}</span>
           <div>
             <span style="font-weight:600; color:var(--text-primary); display:block;">Group Sync Status</span>
             <span style="font-size:11px; color:var(--text-secondary); display:block;">
-              ${member.syncWithGroup !== false ? 'Synced with subgroup payments' : 'Individual installment track (Unsynced)'}
+              \${member.syncWithGroup !== false ? 'Synced with subgroup payments' : 'Individual installment track (Unsynced)'}
             </span>
           </div>
         </div>
         <label class="switch-toggle" style="margin-left:auto;">
-          <input type="checkbox" ${member.syncWithGroup !== false ? 'checked' : ''} onchange="app.toggleMemberSync('${member.id}')">
+          <input type="checkbox" \${member.syncWithGroup !== false ? 'checked' : ''} onchange="app.toggleMemberSync('\${member.id}')">
           <span class="slider-round"></span>
         </label>
       </div>
+      ` : ""}
 
       <!-- EMI DECLINING SCHEDULE TABLE -->
       <div class="table-wrapper">
