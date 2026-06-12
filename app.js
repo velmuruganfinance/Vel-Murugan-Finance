@@ -1941,8 +1941,8 @@ class FinanceApp {
   }
 
   // Handles checkbox tick changes on EMI declining table.
-  // Applies tick changes to ALL members in the active subgroup equally,
-  // so a single click keeps the entire group in sync.
+  // Applies tick changes to ALL members in the active subgroup equally (by default),
+  // so a single click keeps the entire group in sync, except for members unlinked from group sync.
   // NOTE: STL members are intentionally excluded — they use toggleSTLTick instead.
   toggleInstallmentTick(rowIdx) {
     const activeMember = this.getActiveMember();
@@ -1967,39 +1967,77 @@ class FinanceApp {
     }
     const shouldTick = !activeMember.ticks[rowIdx]; // true = checking, false = unchecking
 
-    // Apply the same tick/untick to EVERY member in the subgroup
-    subgroup.members.forEach(m => {
-      const totalRows = isWL ? 10 : (m.installments || 16);
-
-      // Ensure ticks array is properly sized for each member
-      if (!m.ticks || m.ticks.length !== totalRows) {
-        const old = m.ticks || [];
-        m.ticks = Array(totalRows).fill(false);
-        for (let i = 0; i < Math.min(old.length, totalRows); i++) {
-          m.ticks[i] = old[i];
+    if (activeMember.syncWithGroup === false) {
+      // Unsynced member: only apply to themselves
+      if (shouldTick) {
+        for (let i = 0; i <= rowIdx; i++) {
+          activeMember.ticks[i] = true;
+        }
+      } else {
+        for (let i = rowIdx; i < activeTotalRows; i++) {
+          activeMember.ticks[i] = false;
         }
       }
+    } else {
+      // Synced member: apply the same tick/untick to all synced members in the subgroup
+      subgroup.members.forEach(m => {
+        if (m.syncWithGroup === false) return; // skip unsynced members
 
-      // Only apply if rowIdx is within this member's installment range
-      if (rowIdx < totalRows) {
-        if (shouldTick) {
-          // Checking: mark all prior rows (up to rowIdx) as ticked
-          for (let i = 0; i <= rowIdx; i++) {
-            m.ticks[i] = true;
-          }
-        } else {
-          // Unchecking: mark all subsequent rows (from rowIdx) as unticked
-          for (let i = rowIdx; i < totalRows; i++) {
-            m.ticks[i] = false;
+        const totalRows = isWL ? 10 : (m.installments || 16);
+
+        // Ensure ticks array is properly sized for each member
+        if (!m.ticks || m.ticks.length !== totalRows) {
+          const old = m.ticks || [];
+          m.ticks = Array(totalRows).fill(false);
+          for (let i = 0; i < Math.min(old.length, totalRows); i++) {
+            m.ticks[i] = old[i];
           }
         }
-      }
-    });
+
+        // Only apply if rowIdx is within this member's installment range
+        if (rowIdx < totalRows) {
+          if (shouldTick) {
+            // Checking: mark all prior rows (up to rowIdx) as ticked
+            for (let i = 0; i <= rowIdx; i++) {
+              m.ticks[i] = true;
+            }
+          } else {
+            // Unchecking: mark all subsequent rows (from rowIdx) as unticked
+            for (let i = rowIdx; i < totalRows; i++) {
+              m.ticks[i] = false;
+            }
+          }
+        }
+      });
+    }
 
     this.saveToStorage();
 
     // Re-render the right table column for the active member only (no flicker)
     this.renderActiveMemberTable();
+  }
+
+  // Toggle synchronization of installment track with group
+  toggleMemberSync(memberId) {
+    const subgroup = this.getActiveSubgroup();
+    if (!subgroup) return;
+    const member = subgroup.members.find(m => m.id === memberId);
+    if (member) {
+      const nextState = member.syncWithGroup !== false ? false : true;
+      member.syncWithGroup = nextState;
+      
+      // If re-enabling sync, align this member's ticks with the group's synced ticks
+      if (nextState) {
+        const syncedMember = subgroup.members.find(m => m.id !== memberId && m.syncWithGroup !== false);
+        if (syncedMember && syncedMember.ticks) {
+          member.ticks = [...syncedMember.ticks];
+        }
+      }
+      
+      this.saveToStorage();
+      this.renderActiveMemberDetails();
+      this.renderActiveMemberTable();
+    }
   }
 
   // STL-specific tick toggle: handles "interest" (monthly interest collected) or
@@ -2824,6 +2862,23 @@ class FinanceApp {
             ₹${remainingBalance.toLocaleString('en-IN')}
           </div>
         </div>
+      </div>
+
+      <!-- Group Sync Override Control Bar -->
+      <div class="sync-control-bar" style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); padding:10px 15px; border-radius:10px; margin-bottom:15px; font-size:13px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:16px;">${member.syncWithGroup !== false ? '🔄' : '👤'}</span>
+          <div>
+            <span style="font-weight:600; color:var(--text-primary); display:block;">Group Sync Status</span>
+            <span style="font-size:11px; color:var(--text-secondary); display:block;">
+              ${member.syncWithGroup !== false ? 'Synced with subgroup payments' : 'Individual installment track (Unsynced)'}
+            </span>
+          </div>
+        </div>
+        <label class="switch-toggle" style="margin-left:auto;">
+          <input type="checkbox" ${member.syncWithGroup !== false ? 'checked' : ''} onchange="app.toggleMemberSync('${member.id}')">
+          <span class="slider-round"></span>
+        </label>
       </div>
 
       <!-- EMI DECLINING SCHEDULE TABLE -->
