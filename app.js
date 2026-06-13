@@ -1235,6 +1235,7 @@ class FinanceApp {
     let catHtml = "";
     let grandTotalLoanInterest = 0;
     let grandTotalOutstanding = 0;
+    let grandTotalEwi = 0;
     
     const sublist = group.categories[cat] || [];
     sublist.forEach(sub => {
@@ -1258,6 +1259,7 @@ class FinanceApp {
 
           grandTotalLoanInterest += totalLoanInterest;
           grandTotalOutstanding += outstanding;
+          grandTotalEwi += m.emi || 0;
 
           catHtml += `
             <tr>
@@ -1300,7 +1302,8 @@ class FinanceApp {
         <tbody>
           ${catHtml}
           <tr class="summary-row">
-            <td colspan="3">GRAND TOTAL</td>
+            <td colspan="2">GRAND TOTAL</td>
+            <td style="font-family: monospace;">${cat === 'WL' ? `₹${grandTotalEwi.toLocaleString('en-IN')}` : ''}</td>
             <td class="text-right">₹${grandTotalLoanInterest.toLocaleString('en-IN')}</td>
             <td class="text-right">₹${grandTotalOutstanding.toLocaleString('en-IN')}</td>
           </tr>
