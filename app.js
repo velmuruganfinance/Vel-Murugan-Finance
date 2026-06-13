@@ -1046,20 +1046,37 @@ class FinanceApp {
     const categories = ["KL", "ML", "WL", "STL"];
     categories.forEach(cat => {
       const sublist = group.categories[cat] || [];
+      let catHtml = "";
+      let hasMembersInCat = false;
+
       sublist.forEach(sub => {
         if (sub.members) {
           sub.members.forEach(m => {
             memberFound = true;
+            hasMembersInCat = true;
             const principal = m.amount || 64000;
             const interest = m.interest || 0;
             const totalLoanInterest = principal + interest;
             const outstanding = this.getMemberOutstanding(m);
 
+            // Calculate Paid Installments count
+            let paidCount = 0;
+            if (cat === "STL") {
+              if (m.stlTicks) {
+                paidCount = m.stlTicks.filter(t => t === "interest" || t === "repaid").length;
+              }
+            } else {
+              if (m.ticks) {
+                paidCount = m.ticks.filter(t => t).length;
+              }
+            }
+
             grandTotalLoanInterest += totalLoanInterest;
             grandTotalOutstanding += outstanding;
 
-            html += `
+            catHtml += `
               <tr>
+                <td style="text-align: center; font-weight: bold; color: var(--text-secondary);">${paidCount}</td>
                 <td>
                   <div style="font-weight: 600; color: var(--text-primary);">${m.name}</div>
                   <div style="font-size: 11px; color: var(--text-secondary);">${m.memberId}</div>
@@ -1075,14 +1092,28 @@ class FinanceApp {
           });
         }
       });
+      
+      if (hasMembersInCat) {
+        html += `
+          <tr class="segment-header-row" style="background-color: var(--bg-secondary);">
+            <td colspan="5" style="font-weight: bold; text-align: left; padding: 10px; border-top: 2px solid var(--border-color); color: var(--text-primary);">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>${cat} Segment</span>
+                <button class="btn btn-secondary screen-only" style="padding: 4px 10px; font-size: 12px;" onclick="app.printSegment('${cat}')">💾 Save ${cat} PDF</button>
+              </div>
+            </td>
+          </tr>
+        `;
+        html += catHtml;
+      }
     });
 
     if (!memberFound) {
-      html = `<tr><td colspan="4" style="text-align:center;">No members found in this primary group.</td></tr>`;
+      html = `<tr><td colspan="5" style="text-align:center;">No members found in this primary group.</td></tr>`;
     } else {
       html += `
         <tr style="border-top: 2px solid var(--border-color); font-weight: 700; background: rgba(0,0,0,0.02);">
-          <td colspan="2">GRAND TOTAL</td>
+          <td colspan="3">GRAND TOTAL</td>
           <td style="text-align: right; font-family: monospace;">₹${grandTotalLoanInterest.toLocaleString('en-IN')}</td>
           <td style="text-align: right; font-family: monospace; color: var(--accent-gold);">₹${grandTotalOutstanding.toLocaleString('en-IN')}</td>
         </tr>
@@ -1173,6 +1204,9 @@ class FinanceApp {
           .text-center {
             text-align: center;
           }
+          .screen-only {
+            display: none !important;
+          }
         </style>
       </head>
       <body>
@@ -1186,6 +1220,122 @@ class FinanceApp {
             window.print();
             setTimeout(function() { window.close(); }, 500);
           }
+        </script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }
+
+  // Prints a specific segment's details separately
+  printSegment(cat) {
+    const group = this.getActiveGroup();
+    if (!group) return;
+
+    let catHtml = "";
+    let grandTotalLoanInterest = 0;
+    let grandTotalOutstanding = 0;
+    
+    const sublist = group.categories[cat] || [];
+    sublist.forEach(sub => {
+      if (sub.members) {
+        sub.members.forEach(m => {
+          const principal = m.amount || 64000;
+          const interest = m.interest || 0;
+          const totalLoanInterest = principal + interest;
+          const outstanding = this.getMemberOutstanding(m);
+
+          let paidCount = 0;
+          if (cat === "STL") {
+            if (m.stlTicks) {
+              paidCount = m.stlTicks.filter(t => t === "interest" || t === "repaid").length;
+            }
+          } else {
+            if (m.ticks) {
+              paidCount = m.ticks.filter(t => t).length;
+            }
+          }
+
+          grandTotalLoanInterest += totalLoanInterest;
+          grandTotalOutstanding += outstanding;
+
+          catHtml += `
+            <tr>
+              <td style="text-align: center; font-weight: bold; color: #475569;">${paidCount}</td>
+              <td>
+                <div style="font-weight: 600; color: #1e293b;">${m.name}</div>
+                <div style="font-size: 11px; color: #64748b;">${m.memberId}</div>
+              </td>
+              <td>
+                <span style="font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #e2e8f0; margin-right: 5px;">${cat}</span>
+                <span style="font-size: 12px; color: #64748b;">${sub.name}</span>
+              </td>
+              <td style="text-align: right; font-family: monospace;">₹${totalLoanInterest.toLocaleString('en-IN')}</td>
+              <td style="text-align: right; font-family: monospace; font-weight: 600; color: #d97706;">₹${outstanding.toLocaleString('en-IN')}</td>
+            </tr>
+          `;
+        });
+      }
+    });
+
+    if (!catHtml) {
+      alert(`No members found in ${cat} segment.`);
+      return;
+    }
+
+    const tableHtml = `
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align: center; width: 10%;">Paid Inst.</th>
+            <th style="text-align: left;">Member Details</th>
+            <th style="text-align: left; width: 25%;">Segment & Subgroup</th>
+            <th style="text-align: right; width: 22%;">Loan + Interest (₹)</th>
+            <th style="text-align: right; width: 22%;">Amount to be Paid (₹)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${catHtml}
+          <tr class="summary-row">
+            <td colspan="3">GRAND TOTAL</td>
+            <td class="text-right">₹${grandTotalLoanInterest.toLocaleString('en-IN')}</td>
+            <td class="text-right">₹${grandTotalOutstanding.toLocaleString('en-IN')}</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+
+    const printWindow = window.open("", "_blank", "width=900,height=700");
+    if (!printWindow) {
+      alert("Popup blocker prevented printing. Please allow popups for this site.");
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Vel Murugan Finance - ${cat} Segment</title>
+        <style>
+          body { font-family: 'Inter', sans-serif; color: #1e293b; padding: 40px; margin: 0; }
+          h2 { font-family: 'Outfit', sans-serif; color: #0f172a; margin-bottom: 5px; font-size: 24px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+          p.date-printed { font-size: 12px; color: #64748b; margin-bottom: 30px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th { background-color: #f8fafc; color: #475569; font-weight: 700; font-size: 13px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; padding: 12px 8px; }
+          td { padding: 12px 8px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+          tr:nth-child(even) td { background-color: #fdfdfd; }
+          tr.summary-row td { font-weight: 700; background-color: #f8fafc; border-top: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8; }
+          .text-right { text-align: right; }
+        </style>
+      </head>
+      <body>
+        <h2>${group.name} - ${cat} Segment Details</h2>
+        <p class="date-printed">Printed on: ${new Date().toLocaleString('en-IN')}</p>
+        <div class="print-table-wrapper">
+          ${tableHtml}
+        </div>
+        <script>
+          window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); }
         </script>
       </body>
       </html>
@@ -1274,6 +1424,7 @@ class FinanceApp {
       const rowData = [];
       cols.forEach(col => {
         let text = col.innerText;
+        text = text.replace(/💾 Save (KL|ML|WL|STL) PDF/g, "").trim();
         
         // Remove currency symbols, newlines, and double quotes
         text = text.replace(/₹/g, "");
