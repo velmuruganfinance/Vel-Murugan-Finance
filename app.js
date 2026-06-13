@@ -1267,8 +1267,11 @@ class FinanceApp {
                 <div style="font-size: 11px; color: #64748b;">${m.memberId}</div>
               </td>
               <td>
-                <span style="font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #e2e8f0; margin-right: 5px;">${cat}</span>
-                <span style="font-size: 12px; color: #64748b;">${sub.name}</span>
+                ${cat === 'WL'
+                  ? `<span style="font-size: 14px; font-weight: 600; font-family: monospace; color: #0f172a;">₹${(m.emi || 0).toLocaleString('en-IN')}</span>`
+                  : `<span style="font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #e2e8f0; margin-right: 5px;">${cat}</span>
+                     <span style="font-size: 12px; color: #64748b;">${sub.name}</span>`
+                }
               </td>
               <td style="text-align: right; font-family: monospace;">₹${totalLoanInterest.toLocaleString('en-IN')}</td>
               <td style="text-align: right; font-family: monospace; font-weight: 600; color: #d97706;">₹${outstanding.toLocaleString('en-IN')}</td>
@@ -1289,7 +1292,7 @@ class FinanceApp {
           <tr>
             <th style="text-align: center; width: 10%;">Paid Inst.</th>
             <th style="text-align: left;">Member Details</th>
-            <th style="text-align: left; width: 25%;">Segment & Subgroup</th>
+            <th style="text-align: left; width: 25%;">${cat === 'WL' ? 'EWI (₹)' : 'Segment & Subgroup'}</th>
             <th style="text-align: right; width: 22%;">Loan + Interest (₹)</th>
             <th style="text-align: right; width: 22%;">Amount to be Paid (₹)</th>
           </tr>
