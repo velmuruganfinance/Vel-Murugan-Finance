@@ -2094,6 +2094,36 @@ class FinanceApp {
         newMember.emi = emi;
         newMember.lastEmiMonth = lastEmiMonth;
         newMember.ticks = Array(installments).fill(false);
+        // Explicitly set syncWithGroup for non-STL/non-WL categories (KL, ML)
+        if (this.state.currentCategory === "KL" || this.state.currentCategory === "ML") {
+          newMember.syncWithGroup = true;
+          // Align new member's ticks with the group's synced ticks immediately
+          const otherSyncedMembers = subgroup.members ? subgroup.members.filter(m => m.syncWithGroup !== false) : [];
+          if (otherSyncedMembers.length > 0) {
+            let maxSyncedPaidMonthKey = null;
+            otherSyncedMembers.forEach(m => {
+              if (m.ticks && m.firstEmiMonth) {
+                for (let i = m.ticks.length - 1; i >= 0; i--) {
+                  if (m.ticks[i]) {
+                    const monthKey = this.getEmiMonthKey(m.firstEmiMonth, i);
+                    if (monthKey && (!maxSyncedPaidMonthKey || monthKey > maxSyncedPaidMonthKey)) {
+                      maxSyncedPaidMonthKey = monthKey;
+                    }
+                    break;
+                  }
+                }
+              }
+            });
+            if (maxSyncedPaidMonthKey) {
+              for (let i = 0; i < installments; i++) {
+                const monthKey = this.getEmiMonthKey(newMember.firstEmiMonth, i);
+                if (monthKey && monthKey <= maxSyncedPaidMonthKey) {
+                  newMember.ticks[i] = true;
+                }
+              }
+            }
+          }
+        }
       }
 
       if (!subgroup.members) subgroup.members = [];
@@ -2193,21 +2223,6 @@ class FinanceApp {
     }
     const shouldTick = !activeMember.ticks[rowIdx]; // true = checking, false = unchecking
 
-    // ── Helper: convert a "yyyy-mm" firstEmiMonth + row offset → "yyyy-mm" key ──
-    const getEmiMonthKey = (firstEmiMonth, offset) => {
-      if (!firstEmiMonth) return null;
-      const parts = firstEmiMonth.split("-");
-      if (parts.length !== 2) return null;
-      let year = parseInt(parts[0]);
-      let monthIdx = parseInt(parts[1]) - 1; // 0-indexed
-      monthIdx += offset;
-      if (monthIdx >= 12) {
-        year += Math.floor(monthIdx / 12);
-        monthIdx = monthIdx % 12;
-      }
-      return `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
-    };
-
     if (activeMember.syncWithGroup === false || isWL) {
       // Unsynced member or WL segment: only apply to themselves
       if (shouldTick) {
@@ -2221,7 +2236,7 @@ class FinanceApp {
       }
     } else {
       // ── Determine the clicked EMI month from the ACTIVE member (for non-WL) ──
-      const clickedEmiMonthKey = getEmiMonthKey(activeMember.firstEmiMonth, rowIdx);
+      const clickedEmiMonthKey = this.getEmiMonthKey(activeMember.firstEmiMonth, rowIdx);
 
       // Synced member: apply the same tick/untick to all synced members in the subgroup
       subgroup.members.forEach(m => {
@@ -2249,15 +2264,27 @@ class FinanceApp {
           // Find the row in this member that matches the clicked EMI month
           targetIdx = -1;
           for (let i = 0; i < totalRows; i++) {
-            if (getEmiMonthKey(m.firstEmiMonth, i) === clickedEmiMonthKey) {
+            if (this.getEmiMonthKey(m.firstEmiMonth, i) === clickedEmiMonthKey) {
               targetIdx = i;
               break;
             }
           }
-          // If clicked month is before this member's schedule → tick nothing (or untick nothing)
+          // If clicked month is not in schedule
           if (targetIdx === -1) {
-            if (shouldTick) return; // month hasn't started for this member
-            else return;            // nothing to untick
+            const firstMonthOfM = m.firstEmiMonth;
+            const lastMonthOfM = this.getEmiMonthKey(m.firstEmiMonth, totalRows - 1);
+            if (clickedEmiMonthKey < firstMonthOfM) {
+              // Clicked month is before start: do nothing
+              return;
+            } else if (clickedEmiMonthKey > lastMonthOfM) {
+              // Clicked month is after end: mark as fully paid if checking
+              if (shouldTick) {
+                for (let i = 0; i < totalRows; i++) {
+                  m.ticks[i] = true;
+                }
+              }
+              return;
+            }
           }
         }
 
@@ -2290,15 +2317,41 @@ class FinanceApp {
       const nextState = member.syncWithGroup !== false ? false : true;
       member.syncWithGroup = nextState;
       
-      // If re-enabling sync, align this member's ticks with the group's synced ticks
+      // If re-enabling sync, align this member's ticks with the group's synced ticks by calendar month
       if (nextState) {
-        const syncedMember = subgroup.members.find(m => m.id !== memberId && m.syncWithGroup !== false);
-        if (syncedMember && syncedMember.ticks) {
-          member.ticks = [...syncedMember.ticks];
+        const otherSyncedMembers = subgroup.members.filter(m => m.id !== memberId && m.syncWithGroup !== false);
+        if (otherSyncedMembers.length > 0) {
+          let maxSyncedPaidMonthKey = null;
+
+          otherSyncedMembers.forEach(m => {
+            if (m.ticks && m.firstEmiMonth) {
+              for (let i = m.ticks.length - 1; i >= 0; i--) {
+                if (m.ticks[i]) {
+                  const monthKey = this.getEmiMonthKey(m.firstEmiMonth, i);
+                  if (monthKey && (!maxSyncedPaidMonthKey || monthKey > maxSyncedPaidMonthKey)) {
+                    maxSyncedPaidMonthKey = monthKey;
+                  }
+                  break;
+                }
+              }
+            }
+          });
+
+          const totalRows = member.installments || 16;
+          member.ticks = Array(totalRows).fill(false);
+          if (maxSyncedPaidMonthKey) {
+            for (let i = 0; i < totalRows; i++) {
+              const monthKey = this.getEmiMonthKey(member.firstEmiMonth, i);
+              if (monthKey && monthKey <= maxSyncedPaidMonthKey) {
+                member.ticks[i] = true;
+              }
+            }
+          }
         }
       }
       
       this.saveToStorage();
+      this.renderPortalMembersList();   // refresh sync badges in sidebar
       this.renderActiveMemberDetails();
       this.renderActiveMemberTable();
     }
@@ -2709,12 +2762,19 @@ class FinanceApp {
       filteredMembers.forEach(m => {
         const isSelected = m.id === this.state.currentMemberId ? "selected" : "";
         const thumb = m.photo ? m.photo : `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='%2394a3b8'><circle cx='50' cy='50' r='45'/></svg>`;
+        const isSynced = m.syncWithGroup !== false;
+        const cat = this.state.currentCategory;
+        // Show sync badge only for categories that support group sync (KL, ML)
+        const showSyncBadge = (cat === "KL" || cat === "ML");
+        const syncBadge = showSyncBadge
+          ? `<span title="${isSynced ? 'Group Sync ON' : 'Group Sync OFF (Individual track)'}" style="font-size:13px; margin-left:4px; opacity:${isSynced ? '1' : '0.5'}">${isSynced ? '🔄' : '👤'}</span>`
+          : '';
         
         html += `
           <div class="member-list-item ${isSelected}" onclick="app.selectMember('${m.id}')">
             <img class="member-item-thumb" src="${thumb}" alt="${m.name} Thumb">
             <div class="member-item-details">
-              <span class="member-item-name">${m.name}</span>
+              <span class="member-item-name">${m.name}${syncBadge}</span>
               <span class="member-item-meta">${m.memberId} | Principal: ₹${(m.amount || 0).toLocaleString('en-IN')}</span>
             </div>
           </div>
@@ -2732,9 +2792,12 @@ class FinanceApp {
     // Highlight list visually
     const items = this.dom.membersListContainer.querySelectorAll(".member-list-item");
     items.forEach(el => el.classList.remove("selected"));
+    const selected = this.dom.membersListContainer.querySelector(`[onclick="app.selectMember('${mId}')"]`);
+    if (selected) selected.classList.add("selected");
     
     // Re-render middle details & right table columns
     this.renderActiveMemberDetails();
+    this.renderActiveMemberTable();
   }
 
   // 2. Render Middle Column details profile card
@@ -2941,6 +3004,22 @@ class FinanceApp {
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return `${monthNames[monthIdx]} ${year}`;
   }
+
+  // Get raw yyyy-mm month key for an offset from firstEmiMonth
+  getEmiMonthKey(firstEmiMonth, offset) {
+    if (!firstEmiMonth) return null;
+    const parts = firstEmiMonth.split("-");
+    if (parts.length !== 2) return null;
+    let year = parseInt(parts[0]);
+    let monthIdx = parseInt(parts[1]) - 1; // 0-indexed
+    monthIdx += offset;
+    if (monthIdx >= 12) {
+      year += Math.floor(monthIdx / 12);
+      monthIdx = monthIdx % 12;
+    }
+    return `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
+  }
+
 
   // 3. Render Right Column: Declining balance table with checkboxes
   renderActiveMemberTable() {
@@ -3154,24 +3233,23 @@ class FinanceApp {
         </div>
       </div>
 
-      ${(this.state.currentCategory !== "WL" && this.state.currentCategory !== "STL") ? `
-      <!-- Group Sync Override Control Bar -->
-      <div class="sync-control-bar" style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); padding:10px 15px; border-radius:10px; margin-bottom:15px; font-size:13px;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:16px;">\${member.syncWithGroup !== false ? '🔄' : '👤'}</span>
-          <div>
-            <span style="font-weight:600; color:var(--text-primary); display:block;">Group Sync Status</span>
-            <span style="font-size:11px; color:var(--text-secondary); display:block;">
-              \${member.syncWithGroup !== false ? 'Synced with subgroup payments' : 'Individual installment track (Unsynced)'}
-            </span>
+      ${(this.state.currentCategory !== "WL" && this.state.currentCategory !== "STL") ? (
+        `<div class="sync-control-bar" style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); padding:10px 15px; border-radius:10px; margin-bottom:15px; font-size:13px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">${member.syncWithGroup !== false ? '🔄' : '👤'}</span>
+            <div>
+              <span style="font-weight:600; color:var(--text-primary); display:block;">Group Sync Status</span>
+              <span style="font-size:11px; color:var(--text-secondary); display:block;">
+                ${member.syncWithGroup !== false ? 'Synced with subgroup payments' : 'Individual installment track (Unsynced)'}
+              </span>
+            </div>
           </div>
-        </div>
-        <label class="switch-toggle" style="margin-left:auto;">
-          <input type="checkbox" \${member.syncWithGroup !== false ? 'checked' : ''} onchange="app.toggleMemberSync('\${member.id}')">
-          <span class="slider-round"></span>
-        </label>
-      </div>
-      ` : ""}
+          <label class="switch-toggle" style="margin-left:auto;">
+            <input type="checkbox" ${member.syncWithGroup !== false ? 'checked' : ''} onchange="app.toggleMemberSync('${member.id}')">
+            <span class="slider-round"></span>
+          </label>
+        </div>`
+      ) : ""}
 
       <!-- EMI DECLINING SCHEDULE TABLE -->
       <div class="table-wrapper">
