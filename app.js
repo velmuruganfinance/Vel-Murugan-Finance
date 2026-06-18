@@ -211,6 +211,7 @@ class FinanceApp {
     if (rawData) {
       try {
         this.state.groups = JSON.parse(rawData);
+        this.sortAllMembers();
         this.migrateLegacyData();
         this.render();
       } catch (e) {
@@ -260,6 +261,7 @@ class FinanceApp {
     if (rawData) {
       try {
         this.state.groups = JSON.parse(rawData);
+        this.sortAllMembers();
         this.migrateLegacyData();
         this.render();
       } catch (e) {
@@ -282,6 +284,7 @@ class FinanceApp {
 
         if (fetchedGroups.length > 0) {
           this.state.groups = fetchedGroups;
+          this.sortAllMembers();
           this.migrateLegacyData();
           // Update local storage cache
           try {
@@ -1051,6 +1054,7 @@ class FinanceApp {
 
       sublist.forEach(sub => {
         if (sub.members) {
+          this.sortMembers(sub.members);
           sub.members.forEach(m => {
             memberFound = true;
             hasMembersInCat = true;
@@ -1240,6 +1244,7 @@ class FinanceApp {
     const sublist = group.categories[cat] || [];
     sublist.forEach(sub => {
       if (sub.members) {
+        this.sortMembers(sub.members);
         sub.members.forEach(m => {
           const principal = m.amount || 64000;
           const interest = m.interest || 0;
@@ -2142,6 +2147,7 @@ class FinanceApp {
       this.state.currentMemberId = newMember.id;
     }
 
+    this.sortMembers(subgroup.members);
     this.saveToStorage();
     this.closeModal("modal-member");
     this.renderPortalMembersList();
@@ -2401,6 +2407,50 @@ class FinanceApp {
       return emi;
     }
     return emi;
+  }
+
+  sortMembers(members) {
+    if (!Array.isArray(members)) return;
+    members.sort((a, b) => {
+      const idA = String(a.memberId || "").trim();
+      const idB = String(b.memberId || "").trim();
+      const matchA = idA.match(/[^a-zA-Z0-9]/);
+      const matchB = idB.match(/[^a-zA-Z0-9]/);
+      let prefixA = idA;
+      let suffixA = "";
+      if (matchA) {
+        const idx = matchA.index;
+        prefixA = idA.substring(0, idx);
+        suffixA = idA.substring(idx + 1);
+      }
+      let prefixB = idB;
+      let suffixB = "";
+      if (matchB) {
+        const idx = matchB.index;
+        prefixB = idB.substring(0, idx);
+        suffixB = idB.substring(idx + 1);
+      }
+      const prefixCompare = prefixA.localeCompare(prefixB, undefined, { numeric: true, sensitivity: 'base' });
+      if (prefixCompare !== 0) return prefixCompare;
+      return suffixA.localeCompare(suffixB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  }
+
+  sortAllMembers() {
+    if (!Array.isArray(this.state.groups)) return;
+    this.state.groups.forEach(g => {
+      if (g.categories) {
+        Object.values(g.categories).forEach(catList => {
+          if (Array.isArray(catList)) {
+            catList.forEach(sub => {
+              if (sub.members) {
+                this.sortMembers(sub.members);
+              }
+            });
+          }
+        });
+      }
+    });
   }
 
   // Helper to calculate outstanding balance for a member
@@ -2755,6 +2805,10 @@ class FinanceApp {
 
     const container = this.dom.membersListContainer;
     let html = "";
+
+    if (subgroup.members) {
+      this.sortMembers(subgroup.members);
+    }
 
     // Apply filtering query
     const filteredMembers = (subgroup.members || []).filter(m => {
@@ -3327,6 +3381,7 @@ class FinanceApp {
         if (Array.isArray(parsed)) {
           // simple schema validation
           this.state.groups = parsed;
+          this.sortAllMembers();
           this.saveToStorage();
           this.clearAllGroupsFromFirestore().then(() => {
             this.uploadAllGroupsToFirestore();
