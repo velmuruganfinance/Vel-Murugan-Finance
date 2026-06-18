@@ -1764,7 +1764,10 @@ class FinanceApp {
     document.getElementById("input-m-interest").value = 14000;
     document.getElementById("input-m-installments").value = 16;
     document.getElementById("input-m-emi").value = 4000;
-    document.getElementById("input-m-issue-date").value = new Date().toISOString().substring(0, 10);
+    // Use local date parts to avoid UTC timezone offset issues (e.g. IST = UTC+5:30)
+    const _todayLocal = new Date();
+    const _todayStr = `${_todayLocal.getFullYear()}-${String(_todayLocal.getMonth() + 1).padStart(2, '0')}-${String(_todayLocal.getDate()).padStart(2, '0')}`;
+    document.getElementById("input-m-issue-date").value = _todayStr;
     document.getElementById("input-m-first-emi").value = "";
     document.getElementById("input-m-last-emi").value = "";
     document.getElementById("input-m-address").value = "";
@@ -1830,13 +1833,21 @@ class FinanceApp {
       // Default Gender radio to Male
       document.getElementById("gender-male").checked = true;
       
-      // Auto pre-fill First / Last EMI months based on today's date
-      const today = new Date();
-      const firstEmiDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-      const firstEmiStr = firstEmiDate.toISOString().substring(0, 7);
+      // Auto pre-fill First / Last EMI months derived from the issue date already set in the form
+      // This avoids a second new Date() call and keeps both fields perfectly in sync with issue date
+      const issueDateVal = document.getElementById("input-m-issue-date").value; // "yyyy-mm-dd" local
+      const [iYr, iMo] = issueDateVal.split("-").map(Number);
+      // First EMI = next calendar month after the issue month
+      const firstEmiDate = new Date(iYr, iMo, 1); // iMo is 1-based, so new Date(yr, iMo, 1) = next month
+      const firstEmiYr = firstEmiDate.getFullYear();
+      const firstEmiMo = String(firstEmiDate.getMonth() + 1).padStart(2, "0");
+      const firstEmiStr = `${firstEmiYr}-${firstEmiMo}`;
       const installments = parseInt(document.getElementById("input-m-installments").value) || 16;
-      const lastEmiDate = new Date(today.getFullYear(), today.getMonth() + 1 + (installments - 1), 1);
-      const lastEmiStr = lastEmiDate.toISOString().substring(0, 7);
+      // Last EMI = First EMI + (installments - 1) months
+      const lastEmiDate = new Date(firstEmiYr, firstEmiDate.getMonth() + (installments - 1), 1);
+      const lastEmiYr = lastEmiDate.getFullYear();
+      const lastEmiMo = String(lastEmiDate.getMonth() + 1).padStart(2, "0");
+      const lastEmiStr = `${lastEmiYr}-${lastEmiMo}`;
 
       document.getElementById("input-m-first-emi").value = firstEmiStr;
       document.getElementById("input-m-last-emi").value = lastEmiStr;
