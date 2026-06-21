@@ -1086,8 +1086,17 @@ class FinanceApp {
                   <div style="font-size: 11px; color: var(--text-secondary);">${m.memberId}</div>
                 </td>
                 <td>
-                  <span style="font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); margin-right: 5px;">${cat}</span>
-                  <span style="font-size: 12px; color: var(--text-secondary);">${sub.name}</span>
+                  ${cat === 'KL' 
+                    ? `<span style="font-size: 12px; color: var(--text-primary); font-weight: 500;">${sub.name}</span>`
+                    : `<span style="font-size: 12px; color: var(--text-secondary); opacity: 0.4;">-</span>`
+                  }
+                </td>
+                <td>
+                  ${(cat === 'WL' || cat === 'KL' || cat === 'ML')
+                    ? `<span style="font-size: 14px; font-weight: 600; font-family: monospace; color: var(--text-primary);">₹${(m.emi || 0).toLocaleString('en-IN')}</span>`
+                    : `<span style="font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); margin-right: 5px;">${cat}</span>
+                       <span style="font-size: 12px; color: var(--text-secondary);">${sub.name}</span>`
+                  }
                 </td>
                 <td style="text-align: right; font-family: monospace;">₹${totalLoanInterest.toLocaleString('en-IN')}</td>
                 <td style="text-align: right; font-family: monospace; font-weight: 600; color: var(--accent-gold);">₹${outstanding.toLocaleString('en-IN')}</td>
@@ -1100,7 +1109,7 @@ class FinanceApp {
       if (hasMembersInCat) {
         html += `
           <tr class="segment-header-row" style="background-color: var(--bg-secondary);">
-            <td colspan="5" style="font-weight: bold; text-align: left; padding: 10px; border-top: 2px solid var(--border-color); color: var(--text-primary);">
+            <td colspan="6" style="font-weight: bold; text-align: left; padding: 10px; border-top: 2px solid var(--border-color); color: var(--text-primary);">
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <span>${cat} Segment</span>
                 <button class="btn btn-secondary screen-only" style="padding: 4px 10px; font-size: 12px;" onclick="app.printSegment('${cat}')">💾 Save ${cat} PDF</button>
@@ -1113,11 +1122,11 @@ class FinanceApp {
     });
 
     if (!memberFound) {
-      html = `<tr><td colspan="5" style="text-align:center;">No members found in this primary group.</td></tr>`;
+      html = `<tr><td colspan="6" style="text-align:center;">No members found in this primary group.</td></tr>`;
     } else {
       html += `
         <tr style="border-top: 2px solid var(--border-color); font-weight: 700; background: rgba(0,0,0,0.02);">
-          <td colspan="3">GRAND TOTAL</td>
+          <td colspan="4">GRAND TOTAL</td>
           <td style="text-align: right; font-family: monospace;">₹${grandTotalLoanInterest.toLocaleString('en-IN')}</td>
           <td style="text-align: right; font-family: monospace; color: var(--accent-gold);">₹${grandTotalOutstanding.toLocaleString('en-IN')}</td>
         </tr>
@@ -1273,8 +1282,9 @@ class FinanceApp {
                 <div style="font-weight: 600; color: #1e293b;">${m.name}</div>
                 <div style="font-size: 11px; color: #64748b;">${m.memberId}</div>
               </td>
+              ${cat === 'KL' ? `<td style="font-size: 12px; color: #64748b;">${sub.name}</td>` : ''}
               <td>
-                ${cat === 'WL'
+                ${(cat === 'WL' || cat === 'KL' || cat === 'ML')
                   ? `<span style="font-size: 14px; font-weight: 600; font-family: monospace; color: #0f172a;">₹${(m.emi || 0).toLocaleString('en-IN')}</span>`
                   : `<span style="font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #e2e8f0; margin-right: 5px;">${cat}</span>
                      <span style="font-size: 12px; color: #64748b;">${sub.name}</span>`
@@ -1299,7 +1309,8 @@ class FinanceApp {
           <tr>
             <th style="text-align: center; width: 10%;">Paid Inst.</th>
             <th style="text-align: left;">Member Details</th>
-            <th style="text-align: left; width: 25%;">${cat === 'WL' ? 'EWI (₹)' : 'Segment & Subgroup'}</th>
+            ${cat === 'KL' ? `<th style="text-align: left; width: 20%;">Subgroup</th>` : ''}
+            <th style="text-align: left; width: 25%;">${(cat === 'WL') ? 'EWI (₹)' : ((cat === 'KL' || cat === 'ML') ? 'EMI (₹)' : 'Segment & Subgroup')}</th>
             <th style="text-align: right; width: 22%;">Loan + Interest (₹)</th>
             <th style="text-align: right; width: 22%;">Amount to be Paid (₹)</th>
           </tr>
@@ -1307,8 +1318,8 @@ class FinanceApp {
         <tbody>
           ${catHtml}
           <tr class="summary-row">
-            <td colspan="2">GRAND TOTAL</td>
-            <td style="font-family: monospace;">${cat === 'WL' ? `₹${grandTotalEwi.toLocaleString('en-IN')}` : ''}</td>
+            <td colspan="${cat === 'KL' ? 3 : 2}">GRAND TOTAL</td>
+            <td style="font-family: monospace;">${(cat === 'WL' || cat === 'KL' || cat === 'ML') ? `₹${grandTotalEwi.toLocaleString('en-IN')}` : ''}</td>
             <td class="text-right">₹${grandTotalLoanInterest.toLocaleString('en-IN')}</td>
             <td class="text-right">₹${grandTotalOutstanding.toLocaleString('en-IN')}</td>
           </tr>
