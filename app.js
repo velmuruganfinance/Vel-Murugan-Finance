@@ -970,56 +970,219 @@ class FinanceApp {
     if (!tbody) return;
 
     const list = group.categories[this.state.currentCategory] || [];
+    const tableEl = document.getElementById("subgroup-chart-table");
+    const thead = tableEl ? tableEl.querySelector("thead") : null;
     let html = "";
-    let grandTotalMembers = 0;
-    let grandTotalEmi = 0;
-    let grandTotalOutstanding = 0;
 
-    if (list.length === 0) {
-      html = `<tr><td colspan="4" style="text-align:center;">No subgroups found in this category.</td></tr>`;
-    } else {
+    if (this.state.currentCategory === "ML") {
+      // Custom table for ML category
+      if (thead) {
+        thead.innerHTML = `
+          <tr>
+            <th style="text-align: left;">Member's IDs</th>
+            <th style="text-align: right; width: 30%; font-weight: 700; color: var(--accent-gold);">Amount to repay (₹)</th>
+            <th style="text-align: center; width: 22%;">Paid installments</th>
+            <th style="text-align: right; width: 22%; font-weight: 600;">EMI amount (₹)</th>
+          </tr>
+        `;
+      }
+
+      // Collect all members from subgroups of ML category
+      const allMembers = [];
       list.forEach(sub => {
-        const memberCount = sub.members ? sub.members.length : 0;
-        let subgroupOutstanding = 0;
-        let subgroupTotalEmi = 0;
         if (sub.members) {
           sub.members.forEach(m => {
-            subgroupOutstanding += this.getMemberOutstanding(m);
-            subgroupTotalEmi += (m.emi || 0);
+            allMembers.push(m);
           });
         }
-        
-        grandTotalMembers += memberCount;
-        grandTotalEmi += subgroupTotalEmi;
-        grandTotalOutstanding += subgroupOutstanding;
+      });
 
+      if (allMembers.length === 0) {
+        html = `<tr><td colspan="4" style="text-align:center;">No members found in this category.</td></tr>`;
+      } else {
+        const groupsMap = {};
+        allMembers.forEach(m => {
+          const paid = m.ticks ? m.ticks.filter(Boolean).length : 0;
+          const outstanding = this.getMemberOutstanding(m);
+          const emi = m.emi || 0;
+          const memberId = m.memberId || "";
+
+          if (!groupsMap[paid]) {
+            groupsMap[paid] = {
+              paidInstallments: paid,
+              memberIds: [],
+              totalOutstanding: 0,
+              totalEmi: 0
+            };
+          }
+          groupsMap[paid].memberIds.push(memberId);
+          groupsMap[paid].totalOutstanding += outstanding;
+          groupsMap[paid].totalEmi += emi;
+        });
+
+        // Group paid installments ordered by descending
+        const sortedGroups = Object.values(groupsMap).sort((a, b) => b.paidInstallments - a.paidInstallments);
+
+        let grandTotalOutstanding = 0;
+        let grandTotalEmi = 0;
+
+        // Custom function to format member IDs with grouping consecutive runs
+        const formatMemberIds = (memberIds) => {
+          const sortedIds = [...memberIds].sort((a, b) => {
+            const cleanA = String(a).trim();
+            const cleanB = String(b).trim();
+            const isNumA = /^\d+$/.test(cleanA);
+            const isNumB = /^\d+$/.test(cleanB);
+            if (isNumA && isNumB) {
+              return parseInt(cleanA, 10) - parseInt(cleanB, 10);
+            }
+            return cleanA.localeCompare(cleanB, undefined, { numeric: true, sensitivity: 'base' });
+          });
+
+          const result = [];
+          let tempRange = [];
+
+          for (let i = 0; i < sortedIds.length; i++) {
+            const id = sortedIds[i];
+            const cleanId = String(id).trim();
+            const isNum = /^\d+$/.test(cleanId);
+            const numVal = isNum ? parseInt(cleanId, 10) : null;
+
+            if (numVal !== null) {
+              if (tempRange.length === 0) {
+                tempRange.push(numVal);
+              } else {
+                const lastNum = tempRange[tempRange.length - 1];
+                if (numVal === lastNum + 1) {
+                  tempRange.push(numVal);
+                } else {
+                  if (tempRange.length === 1) {
+                    result.push(String(tempRange[0]));
+                  } else {
+                    result.push(`${tempRange[0]} to ${tempRange[tempRange.length - 1]}`);
+                  }
+                  tempRange = [numVal];
+                }
+              }
+            } else {
+              if (tempRange.length > 0) {
+                if (tempRange.length === 1) {
+                  result.push(String(tempRange[0]));
+                } else {
+                  result.push(`${tempRange[0]} to ${tempRange[tempRange.length - 1]}`);
+                }
+                tempRange = [];
+              }
+              result.push(cleanId);
+            }
+          }
+
+          if (tempRange.length > 0) {
+            if (tempRange.length === 1) {
+              result.push(String(tempRange[0]));
+            } else {
+              result.push(`${tempRange[0]} to ${tempRange[tempRange.length - 1]}`);
+            }
+          }
+
+          return result.join(", ");
+        };
+
+        sortedGroups.forEach(g => {
+          grandTotalOutstanding += g.totalOutstanding;
+          grandTotalEmi += g.totalEmi;
+
+          html += `
+            <tr>
+              <td style="font-weight: 600;">${formatMemberIds(g.memberIds)}</td>
+              <td style="text-align: right; font-family: monospace; font-weight: 600; color: var(--accent-gold);">
+                ₹${g.totalOutstanding.toLocaleString('en-IN')}
+              </td>
+              <td style="text-align: center;">${g.paidInstallments}</td>
+              <td style="text-align: right; font-family: monospace; font-weight: 600;">
+                ₹${g.totalEmi.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          `;
+        });
+
+        // Add grand total row
         html += `
-          <tr>
-            <td style="font-weight: 600;">${sub.name}</td>
-            <td style="text-align: center;">${memberCount}</td>
-            <td style="text-align: right; font-family: monospace; font-weight: 600;">
-              ₹${subgroupTotalEmi.toLocaleString('en-IN')}
+          <tr style="border-top: 2px solid var(--border-color); font-weight: 700; background: rgba(0,0,0,0.02);">
+            <td>GRAND TOTAL</td>
+            <td style="text-align: right; font-family: monospace; color: var(--accent-gold);">
+              ₹${grandTotalOutstanding.toLocaleString('en-IN')}
             </td>
-            <td style="text-align: right; font-family: monospace; font-weight: 600; color: var(--accent-gold);">
-              ₹${subgroupOutstanding.toLocaleString('en-IN')}
+            <td style="text-align: center;"></td>
+            <td style="text-align: right; font-family: monospace;">
+              ₹${grandTotalEmi.toLocaleString('en-IN')}
             </td>
           </tr>
         `;
-      });
+      }
+    } else {
+      // Original logic for other categories
+      if (thead) {
+        thead.innerHTML = `
+          <tr>
+            <th style="text-align: left;">Sub-Group Name</th>
+            <th style="text-align: center; width: 18%;">No. of Members</th>
+            <th style="text-align: right; width: 22%; font-weight: 600;">Total EMI (₹)</th>
+            <th style="text-align: right; width: 30%; font-weight: 700; color: var(--accent-gold);">Amount to Give (Outstanding)</th>
+          </tr>
+        `;
+      }
 
-      // Add grand total row
-      html += `
-        <tr style="border-top: 2px solid var(--border-color); font-weight: 700; background: rgba(0,0,0,0.02);">
-          <td>GRAND TOTAL</td>
-          <td style="text-align: center;">${grandTotalMembers}</td>
-          <td style="text-align: right; font-family: monospace;">
-            ₹${grandTotalEmi.toLocaleString('en-IN')}
-          </td>
-          <td style="text-align: right; font-family: monospace; color: var(--accent-gold);">
-            ₹${grandTotalOutstanding.toLocaleString('en-IN')}
-          </td>
-        </tr>
-      `;
+      let grandTotalMembers = 0;
+      let grandTotalEmi = 0;
+      let grandTotalOutstanding = 0;
+
+      if (list.length === 0) {
+        html = `<tr><td colspan="4" style="text-align:center;">No subgroups found in this category.</td></tr>`;
+      } else {
+        list.forEach(sub => {
+          const memberCount = sub.members ? sub.members.length : 0;
+          let subgroupOutstanding = 0;
+          let subgroupTotalEmi = 0;
+          if (sub.members) {
+            sub.members.forEach(m => {
+              subgroupOutstanding += this.getMemberOutstanding(m);
+              subgroupTotalEmi += (m.emi || 0);
+            });
+          }
+          
+          grandTotalMembers += memberCount;
+          grandTotalEmi += subgroupTotalEmi;
+          grandTotalOutstanding += subgroupOutstanding;
+
+          html += `
+            <tr>
+              <td style="font-weight: 600;">${sub.name}</td>
+              <td style="text-align: center;">${memberCount}</td>
+              <td style="text-align: right; font-family: monospace; font-weight: 600;">
+                ₹${subgroupTotalEmi.toLocaleString('en-IN')}
+              </td>
+              <td style="text-align: right; font-family: monospace; font-weight: 600; color: var(--accent-gold);">
+                ₹${subgroupOutstanding.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          `;
+        });
+
+        // Add grand total row
+        html += `
+          <tr style="border-top: 2px solid var(--border-color); font-weight: 700; background: rgba(0,0,0,0.02);">
+            <td>GRAND TOTAL</td>
+            <td style="text-align: center;">${grandTotalMembers}</td>
+            <td style="text-align: right; font-family: monospace;">
+              ₹${grandTotalEmi.toLocaleString('en-IN')}
+            </td>
+            <td style="text-align: right; font-family: monospace; color: var(--accent-gold);">
+              ₹${grandTotalOutstanding.toLocaleString('en-IN')}
+            </td>
+          </tr>
+        `;
+      }
     }
 
     // Set title dynamically based on category
