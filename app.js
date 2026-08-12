@@ -30,10 +30,6 @@ function loadScript(url) {
 }
 
 async function initializeFirebaseDynamic() {
-  if (isLocalProtocol) {
-    console.warn("Running on file:// protocol. Local storage fallback active.");
-    return false;
-  }
   try {
     // Load Firebase App Compat first, then load dependencies in parallel
     await loadScript("https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js");
@@ -45,6 +41,19 @@ async function initializeFirebaseDynamic() {
     if (typeof firebase !== 'undefined') {
       firebase.initializeApp(firebaseConfig);
       db = firebase.firestore();
+
+      // Enable Firestore Offline Persistence for seamless offline queueing
+      try {
+        await db.enablePersistence({ synchronizeTabs: true });
+        console.log("Firestore offline persistence enabled.");
+      } catch (err) {
+        if (err.code === 'failed-precondition') {
+          console.warn("Firestore persistence failed: Multiple tabs open.");
+        } else if (err.code === 'unimplemented') {
+          console.warn("Firestore persistence unsupported in browser.");
+        }
+      }
+
       firebaseEnabled = true;
       return true;
     }
@@ -227,6 +236,12 @@ class FinanceApp {
   // Save changes to LocalStorage and update the storage metrics badge, then sync to Firestore
   async saveToStorage(specificGroup = null) {
     try {
+      const now = Date.now();
+      if (specificGroup) {
+        specificGroup.lastModified = now;
+      } else if (this.state.groups) {
+        this.state.groups.forEach(g => { g.lastModified = now; });
+      }
       const dataStr = JSON.stringify(this.state.groups);
       localStorage.setItem("vm_finance_groups", dataStr);
       this.updateStorageStatusBadge();
@@ -240,8 +255,12 @@ class FinanceApp {
       try {
         const groupToSync = specificGroup || this.getActiveGroup();
         if (groupToSync) {
-          await db.collection("groups").doc(groupToSync.id).set(groupToSync);
+          const sanitizedGroup = JSON.parse(JSON.stringify(groupToSync));
+          await db.collection("groups").doc(groupToSync.id).set(sanitizedGroup);
           this.updateCloudStatus("synced");
+        } else if (this.state.groups && this.state.groups.length > 0) {
+          // No single active group selected (e.g. on Home screen or global change), sync all groups
+          await this.uploadAllGroupsToFirestore();
         } else {
           this.updateCloudStatus("synced");
         }
@@ -254,7 +273,7 @@ class FinanceApp {
     }
   }
 
-  // Load database from LocalStorage (cache-first), then fetch and merge from Firestore
+  // Load database from LocalStorage (cache-first), then fetch and merge from Firestore in real-time
   async loadFromStorage() {
     // 1. Immediately load local cache to keep it fast and responsive
     const rawData = localStorage.getItem("vm_finance_groups");
@@ -272,41 +291,67 @@ class FinanceApp {
     }
     this.updateStorageStatusBadge();
 
-    // 2. Fetch latest data from Firestore in the background
+    // 2. Fetch latest data & attach real-time snapshot listener from Firestore
     if (firebaseEnabled && db) {
       this.updateCloudStatus("syncing", "Cloud: Loading data...");
-      try {
-        const querySnapshot = await db.collection("groups").get();
-        const fetchedGroups = [];
-        querySnapshot.forEach((document) => {
-          fetchedGroups.push(document.data());
-        });
+      
+      if (!this.unsubscribeFirestore) {
+        this.unsubscribeFirestore = db.collection("groups").onSnapshot((querySnapshot) => {
+          const fetchedGroups = [];
+          querySnapshot.forEach((document) => {
+            fetchedGroups.push(document.data());
+          });
 
-        if (fetchedGroups.length > 0) {
-          this.state.groups = fetchedGroups;
-          this.sortAllMembers();
-          this.migrateLegacyData();
-          // Update local storage cache
-          try {
-            localStorage.setItem("vm_finance_groups", JSON.stringify(this.state.groups));
-            this.updateStorageStatusBadge();
-          } catch (e) {
-            console.error(e);
-          }
-          this.render();
-          this.updateCloudStatus("synced", "Cloud Synced ✓");
-        } else {
-          // Firestore is empty. If we have local groups, upload them.
-          if (this.state.groups.length > 0) {
-            this.updateCloudStatus("syncing", "Cloud: Initializing database...");
-            await this.uploadAllGroupsToFirestore();
+          if (fetchedGroups.length > 0) {
+            let cloudIsOutdated = false;
+            const fetchedMap = new Map(fetchedGroups.map(g => [g.id, g]));
+            
+            for (const localGroup of this.state.groups) {
+              const fetchedGroup = fetchedMap.get(localGroup.id);
+              if (fetchedGroup) {
+                const localTime = localGroup.lastModified || 0;
+                const fetchedTime = fetchedGroup.lastModified || 0;
+                if (localTime > fetchedTime) {
+                  cloudIsOutdated = true;
+                  break;
+                }
+              } else {
+                 cloudIsOutdated = true;
+                 break;
+              }
+            }
+
+            if (cloudIsOutdated) {
+              this.uploadAllGroupsToFirestore();
+            } else {
+              const sanitizedLocalObj = JSON.parse(JSON.stringify(this.state.groups));
+              if (!this.deepEqual(sanitizedLocalObj, fetchedGroups)) {
+                this.state.groups = fetchedGroups;
+                this.sortAllMembers();
+                this.migrateLegacyData();
+                try {
+                  localStorage.setItem("vm_finance_groups", JSON.stringify(this.state.groups));
+                  this.updateStorageStatusBadge();
+                } catch (e) {
+                  console.error(e);
+                }
+                this.render();
+              }
+            }
+            this.updateCloudStatus("synced", "Cloud Synced ✓");
           } else {
-            this.updateCloudStatus("synced");
+            // Firestore is empty. If we have local groups, upload them.
+            if (this.state.groups.length > 0) {
+              this.updateCloudStatus("syncing", "Cloud: Initializing database...");
+              this.uploadAllGroupsToFirestore();
+            } else {
+              this.updateCloudStatus("synced");
+            }
           }
-        }
-      } catch (error) {
-        console.error("Error loading from Firestore:", error);
-        this.updateCloudStatus("error", "Offline / Sync Error ⚠️");
+        }, (error) => {
+          console.error("Error listening to Firestore:", error);
+          this.updateCloudStatus("error", "Offline / Sync Error ⚠️");
+        });
       }
     } else {
       this.updateCloudStatus("error", "Local Mode (Offline) ⚠️");
@@ -384,7 +429,8 @@ class FinanceApp {
     try {
       const syncPromises = [];
       for (const group of this.state.groups) {
-        syncPromises.push(db.collection("groups").doc(group.id).set(group));
+        const sanitizedGroup = JSON.parse(JSON.stringify(group));
+        syncPromises.push(db.collection("groups").doc(group.id).set(sanitizedGroup));
       }
       await Promise.all(syncPromises);
       this.updateCloudStatus("synced");
@@ -563,6 +609,14 @@ class FinanceApp {
 
   // Attaches event handlers to UI inputs, form submissions, and buttons
   initEventListeners() {
+    // Auto-sync when internet connectivity is restored
+    window.addEventListener("online", () => {
+      console.log("Network online status restored. Triggering cloud sync...");
+      if (firebaseEnabled && db) {
+        this.saveToStorage();
+      }
+    });
+
     // Settings sidebar toggle
     const btnSettings = document.getElementById("btn-settings-toggle");
     const btnCloseSettings = document.getElementById("btn-close-settings");
@@ -2581,6 +2635,25 @@ class FinanceApp {
       return emi;
     }
     return emi;
+  }
+
+  deepEqual(a, b) {
+    if (a === b) return true;
+    if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;
+    if (Array.isArray(a)) {
+      if (!Array.isArray(b) || a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (!this.deepEqual(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+    for (let key of keysA) {
+      if (!b.hasOwnProperty(key) || !this.deepEqual(a[key], b[key])) return false;
+    }
+    return true;
   }
 
   sortMembers(members) {
