@@ -237,10 +237,9 @@ class FinanceApp {
   async saveToStorage(specificGroup = null) {
     try {
       const now = Date.now();
-      if (specificGroup) {
-        specificGroup.lastModified = now;
-      } else if (this.state.groups) {
-        this.state.groups.forEach(g => { g.lastModified = now; });
+      const groupToSync = specificGroup || this.getActiveGroup();
+      if (groupToSync) {
+        groupToSync.lastModified = now;
       }
       const dataStr = JSON.stringify(this.state.groups);
       localStorage.setItem("vm_finance_groups", dataStr);
@@ -303,40 +302,18 @@ class FinanceApp {
           });
 
           if (fetchedGroups.length > 0) {
-            let cloudIsOutdated = false;
-            const fetchedMap = new Map(fetchedGroups.map(g => [g.id, g]));
-            
-            for (const localGroup of this.state.groups) {
-              const fetchedGroup = fetchedMap.get(localGroup.id);
-              if (fetchedGroup) {
-                const localTime = localGroup.lastModified || 0;
-                const fetchedTime = fetchedGroup.lastModified || 0;
-                if (localTime > fetchedTime) {
-                  cloudIsOutdated = true;
-                  break;
-                }
-              } else {
-                 cloudIsOutdated = true;
-                 break;
+            const sanitizedLocalObj = JSON.parse(JSON.stringify(this.state.groups));
+            if (!this.deepEqual(sanitizedLocalObj, fetchedGroups)) {
+              this.state.groups = fetchedGroups;
+              this.sortAllMembers();
+              this.migrateLegacyData();
+              try {
+                localStorage.setItem("vm_finance_groups", JSON.stringify(this.state.groups));
+                this.updateStorageStatusBadge();
+              } catch (e) {
+                console.error(e);
               }
-            }
-
-            if (cloudIsOutdated) {
-              this.uploadAllGroupsToFirestore();
-            } else {
-              const sanitizedLocalObj = JSON.parse(JSON.stringify(this.state.groups));
-              if (!this.deepEqual(sanitizedLocalObj, fetchedGroups)) {
-                this.state.groups = fetchedGroups;
-                this.sortAllMembers();
-                this.migrateLegacyData();
-                try {
-                  localStorage.setItem("vm_finance_groups", JSON.stringify(this.state.groups));
-                  this.updateStorageStatusBadge();
-                } catch (e) {
-                  console.error(e);
-                }
-                this.render();
-              }
+              this.render();
             }
             this.updateCloudStatus("synced", "Cloud Synced ✓");
           } else {
