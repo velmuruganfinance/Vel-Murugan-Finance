@@ -783,18 +783,6 @@ class FinanceApp {
     bindExport("btn-print-main-chart", () => this.printChart("chart-table", "Vel Murugan Finance - Group Outstanding Analytics"));
     bindExport("btn-csv-main-chart", () => this.exportChartToCSV("chart-table", "group_outstanding_analytics.csv"));
 
-    // File selection event compressing Group Leader's photo
-    document.getElementById("input-leader-photo").addEventListener("change", (e) => {
-      if (e.target.files.length > 0) {
-        this.compressImage(e.target.files[0], 250, 250, 0.6, (base64) => {
-          this.tempLeaderPhoto = base64;
-          document.getElementById("preview-leader-photo").src = base64;
-          document.getElementById("preview-leader-photo").style.display = "block";
-          document.getElementById("preview-leader-placeholder").style.display = "none";
-          document.getElementById("btn-remove-leader-photo").style.display = "block";
-        });
-      }
-    });
 
     // Remove Group Leader photo preview
     document.getElementById("btn-remove-leader-photo").addEventListener("click", () => {
@@ -818,21 +806,34 @@ class FinanceApp {
     // Level 4: Add Member Trigger
     document.getElementById("btn-add-member-sidebar").addEventListener("click", () => this.openMemberModal(null));
 
-    // File selections compressing member photo, Aadhar and Cheque
+    // File selection event compressing Group Leader's photo
+    document.getElementById("input-leader-photo").addEventListener("change", (e) => {
+      if (e.target.files.length > 0) {
+        this.compressImage(e.target.files[0], 200, 200, 0.4, (base64) => {
+          this.tempLeaderPhoto = base64;
+          document.getElementById("preview-leader-photo").src = base64;
+          document.getElementById("preview-leader-photo").style.display = "block";
+          document.getElementById("preview-leader-placeholder").style.display = "none";
+          document.getElementById("btn-remove-leader-photo").style.display = "block";
+        });
+      }
+    });
+
     document.getElementById("input-member-photo").addEventListener("change", (e) => {
       if (e.target.files.length > 0) {
-        this.compressImage(e.target.files[0], 250, 250, 0.6, (base64) => {
+        this.compressImage(e.target.files[0], 200, 200, 0.4, (base64) => {
           this.tempMemberPhoto = base64;
           document.getElementById("preview-member-photo").src = base64;
           document.getElementById("preview-member-photo").style.display = "block";
           document.getElementById("preview-member-placeholder").style.display = "none";
+          document.getElementById("btn-remove-member-photo").style.display = "block";
         });
       }
     });
 
     document.getElementById("input-m-aadhar").addEventListener("change", (e) => {
       if (e.target.files.length > 0) {
-        this.compressImage(e.target.files[0], 800, 600, 0.5, (base64) => {
+        this.compressImage(e.target.files[0], 600, 450, 0.3, (base64) => {
           this.tempAadharPhoto = base64;
           document.getElementById("preview-m-aadhar").src = base64;
           document.getElementById("preview-m-aadhar").style.display = "block";
@@ -844,7 +845,7 @@ class FinanceApp {
 
     document.getElementById("input-m-cheque").addEventListener("change", (e) => {
       if (e.target.files.length > 0) {
-        this.compressImage(e.target.files[0], 800, 600, 0.5, (base64) => {
+        this.compressImage(e.target.files[0], 600, 450, 0.3, (base64) => {
           this.tempChequePhoto = base64;
           document.getElementById("preview-m-cheque").src = base64;
           document.getElementById("preview-m-cheque").style.display = "block";
@@ -852,6 +853,16 @@ class FinanceApp {
           document.getElementById("label-m-cheque-status").innerText = "Ready to upload";
         });
       }
+    });
+
+    // Remove Group Leader photo preview
+    document.getElementById("btn-remove-leader-photo").addEventListener("click", () => {
+      this.tempLeaderPhoto = null;
+      document.getElementById("preview-leader-photo").src = "";
+      document.getElementById("preview-leader-photo").style.display = "none";
+      document.getElementById("preview-leader-placeholder").style.display = "flex";
+      document.getElementById("btn-remove-leader-photo").style.display = "none";
+      document.getElementById("input-leader-photo").value = "";
     });
 
     // Dynamic flat EMI calculation trigger: (Loan + Interest Amount) / Installments
@@ -1758,10 +1769,26 @@ class FinanceApp {
       return;
     }
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d").drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+    const maxDimension = 600;
+
+    if (width > height) {
+      if (width > maxDimension) {
+        height = Math.round((height * maxDimension) / width);
+        width = maxDimension;
+      }
+    } else {
+      if (height > maxDimension) {
+        width = Math.round((width * maxDimension) / height);
+        height = maxDimension;
+      }
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d").drawImage(video, 0, 0, width, height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
 
     // Mapping of input IDs to their preview/placeholder/status elements
     const map = {
