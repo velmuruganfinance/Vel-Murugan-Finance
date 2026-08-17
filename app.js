@@ -794,6 +794,19 @@ class FinanceApp {
       document.getElementById("input-leader-photo").value = "";
     });
 
+    // Remove Member photo preview
+    const btnRemoveMemberPhoto = document.getElementById("btn-remove-member-photo");
+    if (btnRemoveMemberPhoto) {
+      btnRemoveMemberPhoto.addEventListener("click", () => {
+        this.tempMemberPhoto = null;
+        document.getElementById("preview-member-photo").src = "";
+        document.getElementById("preview-member-photo").style.display = "none";
+        document.getElementById("preview-member-placeholder").style.display = "flex";
+        btnRemoveMemberPhoto.style.display = "none";
+        document.getElementById("input-member-photo").value = "";
+      });
+    }
+
     // Level 3: Add Sub-group Action trigger
     document.getElementById("btn-add-subgroup").addEventListener("click", () => this.createSubgroupAction());
 
@@ -1801,7 +1814,7 @@ class FinanceApp {
       "input-member-photo": {
         prev: "preview-member-photo",
         placeholder: "preview-member-placeholder",
-        removeBtn: null,
+        removeBtn: "btn-remove-member-photo",
         status: null
       },
       "input-m-aadhar": {
@@ -2002,6 +2015,9 @@ class FinanceApp {
     document.getElementById("preview-member-photo").src = "";
     document.getElementById("preview-member-photo").style.display = "none";
     document.getElementById("preview-member-placeholder").style.display = "flex";
+    if (document.getElementById("btn-remove-member-photo")) {
+      document.getElementById("btn-remove-member-photo").style.display = "none";
+    }
 
     document.getElementById("preview-m-aadhar").src = "";
     document.getElementById("preview-m-aadhar").style.display = "none";
@@ -2068,6 +2084,9 @@ class FinanceApp {
         document.getElementById("preview-member-photo").src = member.photo;
         document.getElementById("preview-member-photo").style.display = "block";
         document.getElementById("preview-member-placeholder").style.display = "none";
+        if (document.getElementById("btn-remove-member-photo")) {
+          document.getElementById("btn-remove-member-photo").style.display = "block";
+        }
       }
 
       if (member.aadharPhoto) {
