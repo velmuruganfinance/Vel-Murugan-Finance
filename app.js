@@ -483,88 +483,9 @@ class FinanceApp {
     }
   }
 
-  // Injects premium responsive preloaded data for an instant out-of-the-box experience
+  // Initialize with empty data instead of mock data
   loadMockData() {
-    const mockGroups = [
-      {
-        id: "group-1700000000000",
-        name: "Mahalaxmi Primary Group",
-        leaderPhoto: SVG_MOCK_AVATARS.devi,
-        categories: {
-          KL: [
-            {
-              id: "sub-101",
-              name: "Kuruvai Trichy Sub-Group A",
-              members: [
-                {
-                  id: "member-201",
-                  name: "Arun Prasad S",
-                  photo: SVG_MOCK_AVATARS.arun,
-                  phone1: "9876543210",
-                  phone2: "9443210987",
-                  gender: "Male",
-                  aadharNo: "523489012345",
-                  memberId: "VM-201",
-                  amount: 64000,
-                  interest: 0,
-                  installments: 16,
-                  emi: 4000,
-                  issueDate: "2026-01-10",
-                  firstEmiMonth: "2026-02",
-                  lastEmiMonth: "2027-05",
-                  address: "Plot 12A, Gandhi Nagar First Street, Trichy - 620002",
-                  aadharPhoto: SVG_MOCK_AVATARS.aadharMock,
-                  chequePhoto: SVG_MOCK_AVATARS.chequeMock,
-                  ticks: [true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false]
-                },
-                {
-                  id: "member-202",
-                  name: "Meena Krishnasamy",
-                  photo: SVG_MOCK_AVATARS.meena,
-                  phone1: "8123456789",
-                  phone2: "",
-                  gender: "Female",
-                  aadharNo: "823489012345",
-                  memberId: "VM-202",
-                  amount: 80000,
-                  interest: 0,
-                  installments: 16,
-                  emi: 5000,
-                  issueDate: "2026-03-05",
-                  firstEmiMonth: "2026-04",
-                  lastEmiMonth: "2027-07",
-                  address: "No. 45, West Car Street, Srirangam, Trichy - 620006",
-                  aadharPhoto: SVG_MOCK_AVATARS.aadharMock,
-                  chequePhoto: null,
-                  ticks: [true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false]
-                }
-              ]
-            }
-          ],
-          ML: [],
-          WL: [],
-          STL: []
-        }
-      },
-      {
-        id: "group-1700000000001",
-        name: "Vinayagar Primary Group",
-        leaderPhoto: SVG_MOCK_AVATARS.ganesh,
-        categories: {
-          KL: [],
-          ML: [],
-          WL: [
-            {
-              id: "sub-102",
-              name: "Weekly Salem Retail A",
-              members: []
-            }
-          ],
-          STL: []
-        }
-      }
-    ];
-    this.state.groups = mockGroups;
+    this.state.groups = [];
     this.saveToStorage();
   }
 
@@ -1323,7 +1244,7 @@ class FinanceApp {
                 <td style="text-align: center; font-weight: bold; color: var(--text-secondary);">${paidCount}</td>
                 <td>
                   <div style="font-weight: 600; color: var(--text-primary);">${m.name}</div>
-                  <div style="font-size: 11px; color: var(--text-secondary);">${m.memberId}</div>
+                  <div style="font-size: 11px; color: var(--text-secondary);">${m.memberId} | 📞 ${m.phone1 || 'N/A'}</div>
                 </td>
                 <td>
                   ${cat === 'KL' 
@@ -1520,7 +1441,7 @@ class FinanceApp {
               <td style="text-align: center; font-weight: bold; color: #475569;">${paidCount}</td>
               <td>
                 <div style="font-weight: 600; color: #1e293b;">${m.name}</div>
-                <div style="font-size: 11px; color: #64748b;">${m.memberId}</div>
+                <div style="font-size: 11px; color: #64748b;">${m.memberId} | 📞 ${m.phone1 || 'N/A'}</div>
               </td>
               ${cat === 'KL' ? `<td style="font-size: 12px; color: #64748b;">${sub.name}</td>` : ''}
               <td>
@@ -3532,7 +3453,21 @@ class FinanceApp {
 
     for (let i = 0; i < totalRows; i++) {
       const sno = i + 1;
-      const rowDate = isWL ? `W${sno}` : this.calculateIncrementedMonth(member.firstEmiMonth, i);
+      let rowDate = '';
+      if (isWL) {
+        if (member.issueDate) {
+          const [iYr, iMo, iDay] = member.issueDate.split("-").map(Number);
+          const baseDate = new Date(iYr, iMo - 1, iDay);
+          baseDate.setDate(baseDate.getDate() + (sno * 7));
+          const dStr = String(baseDate.getDate()).padStart(2, '0');
+          const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          rowDate = `${dStr} ${monthNames[baseDate.getMonth()]} ${baseDate.getFullYear()}`;
+        } else {
+          rowDate = `W${sno}`;
+        }
+      } else {
+        rowDate = this.calculateIncrementedMonth(member.firstEmiMonth, i);
+      }
       const rowEmi = this.getEmiForIndex(member, i, this.state.currentCategory);
       currentBalance = currentBalance - rowEmi;
       const displayBalance = Math.max(0, currentBalance);
