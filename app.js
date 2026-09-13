@@ -3053,7 +3053,7 @@ class FinanceApp {
             <img class="member-item-thumb" src="${thumb}" alt="${m.name} Thumb">
             <div class="member-item-details">
               <span class="member-item-name">${m.name}${syncBadge}</span>
-              <span class="member-item-meta">${m.memberId} | Principal: ₹${(m.amount || 0).toLocaleString('en-IN')}</span>
+              <span class="member-item-meta">${m.memberId} | 📞 ${m.phone1 || 'N/A'} <br> Principal: ₹${(m.amount || 0).toLocaleString('en-IN')}</span>
             </div>
           </div>
         `;
